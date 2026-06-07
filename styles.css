@@ -115,6 +115,34 @@ select:focus, input:focus { border-color: var(--accent-2); }
   color: var(--warn); padding: 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 600;
 }
 
+/* ---------------- Draft board (picks in order, by team) ---------------- */
+.draftboard { margin-bottom: 16px; padding: 16px; }
+.section-title { margin: 0 0 12px; font-size: 16px; }
+.muted-inline { color: var(--muted); font-weight: 400; font-size: 13px; }
+.draft-board { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
+.db-col { flex: 0 0 150px; min-width: 150px; }
+.db-head { font-weight: 800; font-size: 13px; padding: 6px 8px; border-radius: 8px 8px 0 0; background: var(--panel-2); border: 1px solid var(--line); border-bottom: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-col.on-clock .db-head { background: var(--accent); color: #1a1206; }
+.db-cell { border: 1px solid var(--line); border-top: none; padding: 6px 8px; font-size: 12px; min-height: 40px; display: flex; flex-direction: column; justify-content: center; }
+.db-cell:last-child { border-radius: 0 0 8px 8px; }
+.db-cell.empty { color: var(--muted); font-style: italic; }
+.db-cell.current { background: rgba(255,107,53,0.14); box-shadow: 0 0 0 1px var(--accent) inset; }
+.db-pick-no { color: var(--muted); font-size: 10px; }
+.db-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-sub { color: var(--accent-2); font-size: 11px; }
+
+/* ---------------- Team needs panel ---------------- */
+.team-needs { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+.tn-title { font-weight: 800; font-size: 14px; margin-bottom: 8px; }
+.tn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.tn-chip { font-size: 11px; padding: 3px 8px; border-radius: 14px; border: 1px solid var(--line); white-space: nowrap; }
+.tn-chip.good { color: var(--good); border-color: rgba(61,220,132,0.4); background: rgba(61,220,132,0.08); }
+.tn-chip.bad { color: var(--warn); border-color: rgba(255,176,32,0.4); background: rgba(255,176,32,0.08); }
+.tn-open { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.tn-open b { color: var(--text); }
+.tn-rec { font-size: 13px; line-height: 1.45; background: rgba(74,163,255,0.08); border: 1px solid rgba(74,163,255,0.35); border-radius: 10px; padding: 9px 11px; }
+.tn-rec b { color: var(--accent-2); }
+
 /* ---------------- Draft layout ---------------- */
 .draft-layout { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
 @media (max-width: 920px) { .draft-layout { grid-template-columns: 1fr; } }
@@ -206,4 +234,20 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .timeline .bar:hover::after {
   content: attr(data-tip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
   background: #000; color: #fff; font-size: 10px; padding: 3px 6px; border-radius: 4px; white-space: nowrap;
+}
+
+/* ---------------- Mobile tuning ---------------- */
+@media (max-width: 600px) {
+  main { padding: 12px; }
+  .topbar { padding: 12px 16px; }
+  .brand h1 { font-size: 20px; }
+  .ball { font-size: 30px; }
+  .card { padding: 14px; }
+  .draft-status { padding: 12px; gap: 12px; }
+  .onclock-name { font-size: 18px; }
+  .player-list { max-height: none; }
+  #all-rosters { max-height: none; }
+  .db-col { flex-basis: 132px; min-width: 132px; }
+  .player-row { grid-template-columns: 40px 1fr auto; gap: 10px; }
+  .ovr-badge { width: 40px; height: 40px; font-size: 15px; }
 }

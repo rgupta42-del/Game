@@ -62,9 +62,16 @@
         <div id="must-fill-banner" class="must-fill hidden"></div>
       </div>
 
+      <!-- Draft board: every pick, in order, by team (visible the whole draft) -->
+      <div class="draftboard card">
+        <h3 class="section-title">Draft board <span class="muted-inline">— all picks in order, by team</span></h3>
+        <div id="draft-board" class="draft-board"></div>
+      </div>
+
       <div class="draft-layout">
         <!-- Player board -->
         <div class="board card">
+          <div id="team-needs" class="team-needs"></div>
           <div class="board-controls">
             <input id="search" type="text" placeholder="Search players…" />
             <div class="pos-filters" id="pos-filters"></div>

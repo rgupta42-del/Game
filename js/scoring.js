@@ -405,6 +405,70 @@ function pickFitGrade(roster, player, pos) {
 }
 
 // --------------------------------------------------------------------------
+//  Team-needs analysis (powers the live "what does my team need?" panel)
+// --------------------------------------------------------------------------
+
+/**
+ * Inspect a roster's starters and report which team-building boxes are checked
+ * and which are still open, so a drafter knows what to target next.
+ * Returns { strengths, gaps, openPositions, items } where each item is
+ * { key, label, present, have, miss, priority } (lower priority = more urgent).
+ */
+function analyzeRoster(roster) {
+  const s = starterPlayers(roster);
+  const r = (p) => p.ratings;
+  const first = (arr) => (arr.length ? arr[0].name : "");
+
+  const scorers = s.filter((p) => r(p).scoring >= 88);
+  const shooters = s.filter((p) => r(p).shooting >= 74);
+  const engines = s.filter((p) => r(p).playmaking >= 82);
+  const rim = s.filter((p) => r(p).interiorD >= 82);
+  const stoppers = s.filter((p) => r(p).perimeterD >= 84);
+  const boards = s.filter((p) => r(p).rebounding >= 80);
+
+  const items = [
+    { key: "creation", label: "#1 scoring option", present: scorers.length >= 1, priority: 1,
+      have: `${first(scorers)} can be your go-to scorer`,
+      miss: "No true number-one scorer for crunch time" },
+    { key: "rim", label: "Rim protection", present: rim.length >= 1, priority: 1,
+      have: `${first(rim)} anchors the paint`,
+      miss: "No rim protector — vulnerable at the basket" },
+    { key: "spacing", label: "Floor spacing", present: shooters.length >= 2, priority: 2,
+      have: `${shooters.length} reliable shooter${shooters.length === 1 ? "" : "s"}`,
+      miss: "Cramped spacing — needs more shooting" },
+    { key: "playmaking", label: "Primary playmaker", present: engines.length >= 1, priority: 2,
+      have: `${first(engines)} runs the offense`,
+      miss: "No high-end creator to set up teammates" },
+    { key: "perimeterD", label: "Perimeter defense", present: stoppers.length >= 1, priority: 3,
+      have: `${first(stoppers)} can guard the other team's best wing`,
+      miss: "No point-of-attack stopper on the perimeter" },
+    { key: "rebounding", label: "Rebounding", present: boards.length >= 1, priority: 3,
+      have: `${first(boards)} cleans the glass`,
+      miss: "Thin on the glass" },
+  ];
+
+  return {
+    strengths: items.filter((i) => i.present),
+    gaps: items.filter((i) => !i.present),
+    openPositions: POSITIONS.filter((pos) => !roster.starters[pos]),
+    items,
+  };
+}
+
+/** Which analysis gaps would `player` help address? Returns array of keys. */
+function traitsProvided(player) {
+  const r = player.ratings;
+  const out = [];
+  if (r.scoring >= 88) out.push("creation");
+  if (r.interiorD >= 82) out.push("rim");
+  if (r.shooting >= 74) out.push("spacing");
+  if (r.playmaking >= 82) out.push("playmaking");
+  if (r.perimeterD >= 84) out.push("perimeterD");
+  if (r.rebounding >= 80) out.push("rebounding");
+  return out;
+}
+
+// --------------------------------------------------------------------------
 //  Exports
 // --------------------------------------------------------------------------
 
@@ -420,6 +484,8 @@ const SCORING = {
   evaluateRoster,
   playoffLabel,
   pickFitGrade,
+  analyzeRoster,
+  traitsProvided,
   rosterPlayers,
   starterPlayers,
   // Back-compat alias: the UI's "overall" badge now shows the career rating.

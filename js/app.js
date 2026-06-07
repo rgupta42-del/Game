@@ -138,6 +138,8 @@
       return;
     }
     renderStatus();
+    renderDraftBoard();
+    renderTeamNeeds();
     renderPlayerList();
     renderAllRosters();
 
@@ -348,6 +350,102 @@
   function commitPick(player, slot) {
     game.draft(player, slot);
     renderDraft();
+  }
+
+  // ---- Draft board: every pick, in order, by team ------------------------
+  function renderDraftBoard() {
+    const wrap = $("#draft-board");
+    wrap.innerHTML = "";
+    const rounds = game.picksPerManager;
+
+    const byMgrRound = {};
+    game.pickLog.forEach((e) => {
+      (byMgrRound[e.managerId] = byMgrRound[e.managerId] || {})[e.round] = e;
+    });
+    const curId = game.isComplete ? -1 : game.currentManager().id;
+    const curRound = game.isComplete ? -1 : game.currentRound();
+
+    game.managers.forEach((m) => {
+      const col = el("div", "db-col" + (m.id === curId ? " on-clock" : ""));
+      col.appendChild(el("div", "db-head", (m.isCpu ? "🤖 " : "") + m.name));
+      for (let rd = 1; rd <= rounds; rd++) {
+        const e = byMgrRound[m.id] && byMgrRound[m.id][rd];
+        const isCurrent = m.id === curId && rd === curRound;
+        const cell = el("div", "db-cell" + (e ? "" : " empty") + (isCurrent ? " current" : ""));
+        if (e) {
+          cell.innerHTML =
+            `<span class="db-pick-no">#${e.overall} · ${e.slot}</span>` +
+            `<span class="db-name">${e.player.name}</span>` +
+            `<span class="db-sub">${careerRating(e.player)} ovr</span>`;
+        } else {
+          cell.innerHTML =
+            `<span class="db-pick-no">R${rd}</span>` +
+            `<span>${isCurrent ? "picking…" : "—"}</span>`;
+        }
+        col.appendChild(cell);
+      }
+      wrap.appendChild(col);
+    });
+  }
+
+  // ---- Team-needs guidance for the manager on the clock ------------------
+  const NEED_LABELS = {
+    creation: "a #1 scorer", rim: "rim protection", spacing: "shooting / spacing",
+    playmaking: "a playmaker", perimeterD: "perimeter defense", rebounding: "rebounding",
+  };
+
+  function renderTeamNeeds() {
+    const wrap = $("#team-needs");
+    const m = game.currentManager();
+    const a = SCORING.analyzeRoster({ starters: m.starters, bench: [] });
+
+    const strengthChips = a.strengths
+      .map((i) => `<span class="tn-chip good" title="${i.have}">✓ ${i.label}</span>`)
+      .join("");
+    const gapChips = a.gaps
+      .map((i) => `<span class="tn-chip bad" title="${i.miss}">✗ ${i.label}</span>`)
+      .join("");
+    const haveRow = strengthChips || `<span class="tn-chip">No picks yet</span>`;
+
+    const openTxt = a.openPositions.length
+      ? `<b>${a.openPositions.join(", ")}</b>`
+      : "all five filled";
+
+    const rec = recommendPick(m, a);
+    const recHtml = rec ? `💡 <b>Target:</b> ${rec.text}` : "Your starting five is set.";
+
+    wrap.innerHTML =
+      `<div class="tn-title">${m.isCpu ? "🤖 " : ""}${m.name} — what your team has & needs</div>` +
+      `<div class="tn-row">${haveRow}${gapChips}</div>` +
+      `<div class="tn-open">Open positions: ${openTxt}</div>` +
+      `<div class="tn-rec">${recHtml}</div>`;
+  }
+
+  /** Suggest the best complementary pick available for this roster. */
+  function recommendPick(manager, analysis) {
+    const avail = PLAYER_POOL.filter((p) => game.canDraft(manager, p));
+    if (avail.length === 0) return null;
+    avail.sort((x, y) => bestFit(manager, y) - bestFit(manager, x));
+    const top = avail[0];
+
+    const slots = game.legalSlotsFor(manager, top).filter((s) => s !== "BENCH");
+    const slot = slots.includes(top.pos) ? top.pos : slots[0];
+
+    const gapKeys = new Set(analysis.gaps.map((g) => g.key));
+    const provided = SCORING.traitsProvided(top).filter((k) => gapKeys.has(k));
+
+    let why;
+    if (provided.length) {
+      why = `adds ${provided.map((k) => NEED_LABELS[k]).join(" & ")}`;
+    } else if (analysis.gaps.length) {
+      why = `best value available — your biggest gap is ${NEED_LABELS[analysis.gaps[0].key]}`;
+    } else {
+      why = "best all-around value available";
+    }
+
+    const text = `<b>${top.name}</b> at <b>${slot}</b> — ${why} ` +
+      `(Career ${careerRating(top)}, Fit ${Math.round(bestFit(manager, top))}).`;
+    return { player: top, slot, text };
   }
 
   // ---- Roster panel (all teams visible the whole draft) ------------------
