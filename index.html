@@ -25,9 +25,12 @@
         <h2>New Draft</h2>
         <p class="muted">
           Each manager drafts active NBA players in snake order (1→2→3…→3→2→1).
-          Fill every position (PG / SG / SF / PF / C) with reasonable positional
-          flexibility, then we project your roster across 15 seasons — talent,
-          fit, age curves and injury risk included — to crown the best
+          You're drafting their <b>whole career</b> — every pick starts over as a
+          rookie and plays a normalized 15-season arc. Fill every position
+          (PG / SG / SF / PF / C) with reasonable positional flexibility, then we
+          project each roster across those 15 seasons — career-peak talent, how
+          the game ages, injury risk, team fit, two-way defense, spacing, ball
+          dominance, winning pedigree and locker-room culture — to crown the best
           analytical team.
         </p>
 
@@ -70,10 +73,10 @@
             <input id="search" type="text" placeholder="Search players…" />
             <div class="pos-filters" id="pos-filters"></div>
             <select id="sort-by">
-              <option value="overall">Sort: Overall</option>
+              <option value="career">Sort: Career rating</option>
               <option value="fit">Sort: Fit for this team</option>
-              <option value="potential">Sort: Upside (potential)</option>
-              <option value="age">Sort: Youngest</option>
+              <option value="peak">Sort: Peak ability</option>
+              <option value="winner">Sort: Winner / playoff</option>
               <option value="durable">Sort: Most durable</option>
             </select>
           </div>

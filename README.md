@@ -1,10 +1,18 @@
 # 🏀 NBA Re-Draft — Snake Draft Dynasty Builder
 
 A multiplayer, pass-and-play game where managers **re-draft active NBA players as
-rookies** in snake order and keep them for their entire (realized or anticipated)
-careers. An analytics engine then projects every roster across **15 seasons** —
-factoring talent, team fit, age curves, and injury risk — to crown the manager
-who built the best team.
+rookies** in snake order and keep them for a full **15-year career**. You're
+drafting the *whole career*, not the current snapshot: every pick starts over as
+a rookie and plays a normalized 15-season arc. An analytics engine then projects
+every roster across those seasons — career-peak talent, how the game ages, injury
+risk, team fit, two-way defense, spacing, ball dominance, winning pedigree and
+locker-room culture — to crown the manager who built the best team.
+
+> This normalizes across eras and ages: LeBron (41 today) is judged on his
+> all-time **15-year career from his rookie season**, so he edges a current MVP
+> like SGA; oft-injured stars (Kawhi, Embiid, Klay) get discounted from their
+> peaks; and two-way wings (Klay, Kawhi) grade out far ahead of weak defenders
+> (Harden) on that end.
 
 No install, no backend, no internet required. Just open the page.
 
@@ -34,26 +42,38 @@ No install, no backend, no internet required. Just open the page.
 
 ## The scoring model (`js/scoring.js`)
 
-Each roster is simulated for 15 seasons. Three pillars drive a player's value:
+Every roster plays a normalized 15-season career together (everyone a rookie in
+year 0, everyone aging in lockstep). Three pillars drive a player's value each
+season:
 
 | Pillar | What it captures |
 | --- | --- |
-| **Talent** | Position-aware overall from a skill profile (scoring, shooting, playmaking, rebounding, perimeter & interior defense, athleticism, IQ), with a peak-skill bonus so elite specialists aren't dragged to the mean. |
-| **Career arc** | A development-and-decline curve peaking ~age 27–28. Young, high-`potential` players are credited with *anticipated* growth toward their ceiling. |
-| **Availability** | `injuryRisk` (history + age-related wear) reduces a player's effective value each season. Bench depth insures against injuries and aging. |
+| **Peak ability** | Position-aware overall from a career-peak skill profile (scoring, shooting, playmaking, rebounding, perimeter & interior defense, athleticism, IQ), with a peak-skill bonus so elite specialists aren't dragged to the mean. |
+| **Career arc** | A rookie→year-15 curve, shaped per player by `earlyImpact` (great right away?) and `aging` (does the game age well — skill/IQ players sustain, athleticism-reliant ones fade). |
+| **Durability** | `injuryRisk` is a career-long discount on availability (a risk factor, not a season-by-season injury sim). Bench depth insures against it. |
 
-On top of raw talent, each lineup earns a **team-fit / chemistry** grade:
+The headline **Career rating** blends peak ability with the durability- and
+aging-adjusted career average, nudged by the intangibles below.
+
+On top of talent, each lineup earns a **team-fit / chemistry** grade combining
+on-court fit with human factors:
 
 - **Spacing** — enough shooting; two non-spacing bigs is penalized.
-- **Playmaking** — needs a real engine; too many ball-dominant alphas is penalized.
+- **Playmaking** — needs a real engine.
 - **Defense** — blends perimeter & interior; rewards a rim protector and a stopper.
 - **Rebounding** — don't get killed on the glass.
 - **Shot hierarchy** — a clear go-to scorer matters, especially in the playoffs.
+- **Elevators** (`elevates`) — players who make teammates better lift the whole.
+- **Alpha clash** (`ballDominance`) — stacking ball-dominant stars who all need
+  the rock is penalized; off-ball fits are rewarded.
+- **Culture & coachability** — a potential team cancer poisons the room; great
+  culture and system-fit lift it.
 
 These produce, per season:
 
 - a **regular-season win projection** (out of 82), and
-- a **playoff/championship projection** (star power + defense + fit).
+- a **playoff/championship projection** (star power + defense + fit + proven
+  `winning` pedigree).
 
 The final **composite score** blends average regular-season record, playoff depth,
 expected championships over 15 years, and peak ceiling. Highest composite wins.

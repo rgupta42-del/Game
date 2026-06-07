@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const { playerOverall, pickFitGrade, evaluateRoster, playoffLabel, effectiveSeasonValue } = SCORING;
+  const { careerRating, peakOverall, pickFitGrade, evaluateRoster, playoffLabel } = SCORING;
 
   // ---- DOM helpers -------------------------------------------------------
   const $ = (sel) => document.querySelector(sel);
@@ -27,7 +27,7 @@
   const ui = {
     posFilter: "ALL",
     search: "",
-    sortBy: "overall",
+    sortBy: "career",
     rosterView: 0,
     pendingPlayer: null, // player awaiting slot assignment in the modal
   };
@@ -279,13 +279,13 @@
     }
 
     const sorters = {
-      overall: (a, b) => playerOverall(b) - playerOverall(a),
+      career: (a, b) => careerRating(b) - careerRating(a),
       fit: (a, b) => bestFit(m, b) - bestFit(m, a),
-      potential: (a, b) => b.potential - a.potential,
-      age: (a, b) => a.age - b.age,
+      peak: (a, b) => peakOverall(b) - peakOverall(a),
+      winner: (a, b) => b.career.winning - a.career.winning,
       durable: (a, b) => a.injuryRisk - b.injuryRisk,
     };
-    list.sort(sorters[ui.sortBy] || sorters.overall);
+    list.sort(sorters[ui.sortBy] || sorters.career);
     return list;
   }
 
@@ -309,13 +309,14 @@
     }
 
     players.forEach((p) => {
-      const ovr = playerOverall(p);
+      const ovr = careerRating(p);
       const canDraft = !cpuOnClock && game.canDraft(m, p);
       const fit = Math.round(bestFit(m, p));
 
       const row = el("div", "player-row" + (canDraft ? "" : " disabled"));
 
       const badge = el("div", "ovr-badge", String(ovr));
+      badge.title = "Career rating";
       badge.style.borderColor = ovrColor(ovr);
 
       const meta = el("div", "player-meta");
@@ -323,7 +324,8 @@
         <div class="pname">${p.name} ${injuryDot(p.injuryRisk)}</div>
         <div class="psub">
           <span class="tag pos">${p.eligible.join("/")}</span>
-          <span class="tag">Age ${p.age}</span>
+          <span class="tag" title="Career-peak ability">Peak ${peakOverall(p)}</span>
+          <span class="tag" title="Winning / playoff pedigree">Win ${p.career.winning}</span>
           <span class="tag">${p.archetype}</span>
           ${ui.sortBy === "fit" || canDraft ? `<span class="tag fit">Fit ${fit}</span>` : ""}
         </div>`;
@@ -417,9 +419,9 @@
     if (player) {
       const info = el("div");
       info.innerHTML = `<div class="slot-player">${player.name} ${injuryDot(player.injuryRisk)}</div>
-        <div class="slot-sub">${player.pos} · Age ${player.age} · ${player.archetype}</div>`;
+        <div class="slot-sub">${player.pos} · Peak ${peakOverall(player)} · ${player.archetype}</div>`;
       row.appendChild(info);
-      row.appendChild(el("div", "slot-ovr", String(playerOverall(player))));
+      row.appendChild(el("div", "slot-ovr", String(careerRating(player))));
     } else {
       row.appendChild(el("div", "slot-sub", "— empty —"));
       row.appendChild(el("div", "slot-ovr", ""));
