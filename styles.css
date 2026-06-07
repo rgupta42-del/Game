@@ -73,7 +73,9 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .manager-names { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 16px 0; }
 .manager-names .mn-row { display: flex; flex-direction: column; gap: 4px; }
 .manager-names label { font-size: 12px; color: var(--muted); }
-.manager-names input { width: 100%; }
+.manager-names input[type="text"] { width: 100%; }
+.cpu-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); font-size: 12px; margin-top: 2px; }
+.cpu-toggle input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
 
 /* ---------------- Buttons ---------------- */
 .btn {

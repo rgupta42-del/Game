@@ -13,18 +13,24 @@ const STARTER_SLOTS = ["PG", "SG", "SF", "PF", "C"];
 class DraftGame {
   /**
    * @param {string[]} managerNames
-   * @param {object}  opts  { benchSize }
+   * @param {object}  opts  { benchSize, cpuFlags }
    */
   constructor(managerNames, opts = {}) {
     this.benchSize = opts.benchSize ?? 2;
     this.picksPerManager = STARTER_SLOTS.length + this.benchSize;
+    const cpuFlags = opts.cpuFlags ?? [];
 
-    this.managers = managerNames.map((name, i) => ({
-      id: i,
-      name: name && name.trim() ? name.trim() : `Manager ${i + 1}`,
-      starters: { PG: null, SG: null, SF: null, PF: null, C: null },
-      bench: [],
-    }));
+    this.managers = managerNames.map((name, i) => {
+      const isCpu = !!cpuFlags[i];
+      const trimmed = name && name.trim();
+      return {
+        id: i,
+        name: trimmed ? trimmed : isCpu ? `CPU ${i + 1}` : `Manager ${i + 1}`,
+        isCpu,
+        starters: { PG: null, SG: null, SF: null, PF: null, C: null },
+        bench: [],
+      };
+    });
 
     this.draftedIds = new Set();
     this.pickLog = []; // { managerId, player, slot, round, overall }

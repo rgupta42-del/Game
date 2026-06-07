@@ -83,25 +83,45 @@
   function renderManagerNameInputs() {
     const n = parseInt($("#num-managers").value, 10);
     const wrap = $("#manager-names");
-    const existing = {};
-    wrap.querySelectorAll("input").forEach((inp, i) => (existing[i] = inp.value));
+    // Preserve any values/CPU toggles already entered across re-renders.
+    const prevName = {};
+    const prevCpu = {};
+    wrap.querySelectorAll(".mn-row").forEach((row, i) => {
+      prevName[i] = row.querySelector('input[type="text"]').value;
+      prevCpu[i] = row.querySelector('input[type="checkbox"]').checked;
+    });
     wrap.innerHTML = "";
     for (let i = 0; i < n; i++) {
       const row = el("div", "mn-row");
-      row.appendChild(el("label", null, `Manager ${i + 1} name`));
+      row.appendChild(el("label", null, `Seat ${i + 1}`));
+
       const inp = el("input");
       inp.type = "text";
-      inp.placeholder = `Manager ${i + 1}`;
-      inp.value = existing[i] || "";
+      inp.placeholder = prevCpu[i] ? `CPU ${i + 1}` : `Manager ${i + 1}`;
+      inp.value = prevName[i] || "";
       row.appendChild(inp);
+
+      const cpuLabel = el("label", "cpu-toggle");
+      const cb = el("input");
+      cb.type = "checkbox";
+      cb.checked = !!prevCpu[i];
+      cpuLabel.appendChild(cb);
+      cpuLabel.appendChild(el("span", null, "🤖 CPU controls this seat"));
+      cb.addEventListener("change", () => {
+        inp.placeholder = cb.checked ? `CPU ${i + 1}` : `Manager ${i + 1}`;
+      });
+      row.appendChild(cpuLabel);
+
       wrap.appendChild(row);
     }
   }
 
   function startDraft() {
-    const names = Array.from($("#manager-names").querySelectorAll("input")).map((i) => i.value);
+    const rows = Array.from($("#manager-names").querySelectorAll(".mn-row"));
+    const names = rows.map((r) => r.querySelector('input[type="text"]').value);
+    const cpuFlags = rows.map((r) => r.querySelector('input[type="checkbox"]').checked);
     const benchSize = parseInt($("#bench-size").value, 10);
-    game = new DraftGame(names, { benchSize });
+    game = new DraftGame(names, { benchSize, cpuFlags });
     ui.rosterView = game.currentManager().id;
     buildDraftStaticUI();
     showScreen("#draft-screen");
@@ -164,13 +184,72 @@
     ui.rosterView = game.currentManager().id;
     $("#roster-view").value = ui.rosterView;
     renderRoster();
+
+    // Hand the clock to the CPU if this seat is computer-controlled.
+    scheduleCpuPick();
+  }
+
+  // ---- CPU autodraft -----------------------------------------------------
+  const CPU_DELAY_MS = 850; // brief pause so picks are watchable
+
+  function scheduleCpuPick() {
+    const m = game.currentManager();
+    if (!m || !m.isCpu) return;
+    closeModal(); // a CPU never uses the manual slot picker
+    ui.cpuThinking = true;
+    setTimeout(() => {
+      // Re-check: state may have changed (e.g. a New Draft) while we waited.
+      if (!game || game.isComplete) return;
+      const cur = game.currentManager();
+      if (!cur || !cur.isCpu) return;
+      const choice = cpuChoose(cur);
+      ui.cpuThinking = false;
+      if (choice) commitPick(choice.player, choice.slot);
+    }, CPU_DELAY_MS);
+  }
+
+  /**
+   * CPU draft strategy: take the best-fitting available player for the roster's
+   * current needs, then slot them at their best legal position (preferring their
+   * natural position, bench only as a last resort).
+   */
+  function cpuChoose(manager) {
+    const avail = PLAYER_POOL.filter((p) => game.canDraft(manager, p));
+    if (avail.length === 0) return null;
+
+    let best = null;
+    let bestGrade = -Infinity;
+    for (const p of avail) {
+      const grade = bestFit(manager, p);
+      if (grade > bestGrade) {
+        bestGrade = grade;
+        best = p;
+      }
+    }
+
+    const legal = game.legalSlotsFor(manager, best);
+    const starterSlots = legal.filter((s) => s !== "BENCH");
+    let slot;
+    if (starterSlots.length === 0) {
+      slot = "BENCH";
+    } else if (starterSlots.includes(best.pos)) {
+      slot = best.pos; // natural position when available
+    } else {
+      // Otherwise the eligible starter slot that grades out best.
+      slot = starterSlots.reduce(
+        (a, b) => (pickFitGrade(manager, best, b) >= pickFitGrade(manager, best, a) ? b : a),
+        starterSlots[0]
+      );
+    }
+    return { player: best, slot };
   }
 
   function renderStatus() {
     const m = game.currentManager();
-    $("#onclock-name").textContent = m.name;
+    $("#onclock-name").textContent = (m.isCpu ? "🤖 " : "") + m.name;
     $("#onclock-meta").textContent =
-      `Round ${game.currentRound()} · Pick #${game.overallPickNumber()} of ${game.totalPicks}`;
+      `Round ${game.currentRound()} · Pick #${game.overallPickNumber()} of ${game.totalPicks}` +
+      (m.isCpu ? " · CPU drafting…" : "");
 
     const up = $("#upcoming-list");
     up.innerHTML = "";
@@ -219,6 +298,7 @@
 
   function renderPlayerList() {
     const m = game.currentManager();
+    const cpuOnClock = m.isCpu;
     const list = $("#player-list");
     list.innerHTML = "";
     const players = visiblePlayers();
@@ -230,7 +310,7 @@
 
     players.forEach((p) => {
       const ovr = playerOverall(p);
-      const canDraft = game.canDraft(m, p);
+      const canDraft = !cpuOnClock && game.canDraft(m, p);
       const fit = Math.round(bestFit(m, p));
 
       const row = el("div", "player-row" + (canDraft ? "" : " disabled"));
@@ -253,6 +333,8 @@
         const btn = el("button", "btn primary mini", "Draft");
         btn.onclick = () => onDraftClick(p);
         actions.appendChild(btn);
+      } else if (cpuOnClock) {
+        actions.appendChild(el("span", "slot-sub", "🤖 CPU"));
       } else {
         actions.appendChild(el("span", "slot-sub", "No legal slot"));
       }
