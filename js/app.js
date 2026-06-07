@@ -28,7 +28,6 @@
     posFilter: "ALL",
     search: "",
     sortBy: "career",
-    rosterView: 0,
     pendingPlayer: null, // player awaiting slot assignment in the modal
   };
 
@@ -51,33 +50,9 @@
       numSel.appendChild(o);
     }
 
-    refreshBenchOptions();
     renderManagerNameInputs();
-    numSel.addEventListener("change", () => {
-      refreshBenchOptions();
-      renderManagerNameInputs();
-    });
+    numSel.addEventListener("change", renderManagerNameInputs);
     $("#start-draft").addEventListener("click", startDraft);
-  }
-
-  /**
-   * Rebuild the bench-size options, capped so the draft can never exhaust the
-   * player pool (every team must still be able to fill 5 starters + bench).
-   */
-  function refreshBenchOptions() {
-    const n = parseInt($("#num-managers").value, 10);
-    const maxBench = Math.max(0, Math.min(4, Math.floor(PLAYER_POOL.length / n) - 5));
-    const benchSel = $("#bench-size");
-    const prev = parseInt(benchSel.value, 10);
-    benchSel.innerHTML = "";
-    for (let i = 0; i <= maxBench; i++) {
-      const o = el("option", null, i === 0 ? "No bench (5 starters)" : `${i} bench spot${i > 1 ? "s" : ""}`);
-      o.value = i;
-      benchSel.appendChild(o);
-    }
-    // Restore previous choice if still valid, else default to 2 (or the max).
-    const want = !isNaN(prev) ? Math.min(prev, maxBench) : Math.min(2, maxBench);
-    benchSel.value = String(want);
   }
 
   function renderManagerNameInputs() {
@@ -120,9 +95,7 @@
     const rows = Array.from($("#manager-names").querySelectorAll(".mn-row"));
     const names = rows.map((r) => r.querySelector('input[type="text"]').value);
     const cpuFlags = rows.map((r) => r.querySelector('input[type="checkbox"]').checked);
-    const benchSize = parseInt($("#bench-size").value, 10);
-    game = new DraftGame(names, { benchSize, cpuFlags });
-    ui.rosterView = game.currentManager().id;
+    game = new DraftGame(names, { benchSize: 0, cpuFlags });
     buildDraftStaticUI();
     showScreen("#draft-screen");
     renderDraft();
@@ -156,20 +129,6 @@
       renderPlayerList();
     };
 
-    // Roster view selector
-    const rv = $("#roster-view");
-    rv.innerHTML = "";
-    game.managers.forEach((m) => {
-      const o = el("option", null, m.name);
-      o.value = m.id;
-      rv.appendChild(o);
-    });
-    rv.value = ui.rosterView;
-    rv.onchange = (e) => {
-      ui.rosterView = parseInt(e.target.value, 10);
-      renderRoster();
-    };
-
     $("#slot-cancel").onclick = closeModal;
   }
 
@@ -180,10 +139,7 @@
     }
     renderStatus();
     renderPlayerList();
-    // Follow the current drafter's roster automatically.
-    ui.rosterView = game.currentManager().id;
-    $("#roster-view").value = ui.rosterView;
-    renderRoster();
+    renderAllRosters();
 
     // Hand the clock to the CPU if this seat is computer-controlled.
     scheduleCpuPick();
@@ -394,23 +350,25 @@
     renderDraft();
   }
 
-  // ---- Roster panel ------------------------------------------------------
-  function renderRoster() {
-    const m = game.managers[ui.rosterView];
-    const wrap = $("#roster-detail");
+  // ---- Roster panel (all teams visible the whole draft) ------------------
+  function renderAllRosters() {
+    const wrap = $("#all-rosters");
     wrap.innerHTML = "";
+    const onClockId = game.isComplete ? -1 : game.currentManager().id;
 
-    STARTER_SLOTS.forEach((slot) => {
-      const p = m.starters[slot];
-      wrap.appendChild(slotRow(slot, p));
+    game.managers.forEach((m) => {
+      const filled = SCORING.starterPlayers({ starters: m.starters, bench: [] }).length;
+      const card = el("div", "team-card" + (m.id === onClockId ? " on-clock" : ""));
+
+      const head = el("div", "team-card-head");
+      head.innerHTML =
+        `<span class="team-name">${m.isCpu ? "🤖 " : ""}${m.name}</span>` +
+        `<span class="team-fill">${filled}/5${m.id === onClockId ? " · on the clock" : ""}</span>`;
+      card.appendChild(head);
+
+      STARTER_SLOTS.forEach((slot) => card.appendChild(slotRow(slot, m.starters[slot])));
+      wrap.appendChild(card);
     });
-
-    if (game.benchSize > 0) {
-      wrap.appendChild(el("div", "bench-divider", "Bench"));
-      for (let i = 0; i < game.benchSize; i++) {
-        wrap.appendChild(slotRow("BN", m.bench[i] || null));
-      }
-    }
   }
 
   function slotRow(slotKey, player) {
@@ -419,7 +377,7 @@
     if (player) {
       const info = el("div");
       info.innerHTML = `<div class="slot-player">${player.name} ${injuryDot(player.injuryRisk)}</div>
-        <div class="slot-sub">${player.pos} · Peak ${peakOverall(player)} · ${player.archetype}</div>`;
+        <div class="slot-sub">${player.pos} · Peak ${peakOverall(player)}</div>`;
       row.appendChild(info);
       row.appendChild(el("div", "slot-ovr", String(careerRating(player))));
     } else {

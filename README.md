@@ -19,13 +19,15 @@ No install, no backend, no internet required. Just open the page.
 ## How to play
 
 1. Open `index.html` in any modern browser.
-2. Choose the number of managers (2–8) and bench spots, and enter names.
+2. Choose the number of managers (2–8), tick **🤖 CPU** for any empty seats, and
+   enter names.
 3. Draft in **snake order**: Manager 1 → 2 → 3 → … → 3 → 2 → 1 → … The manager
    who picks last in a round picks first in the next.
-4. Each manager must fill all five positions — **PG / SG / SF / PF / C** — with
+4. Each manager drafts a **starting five** — **PG / SG / SF / PF / C** — with
    reasonable positional flexibility (a combo guard can slot at PG or SG, a
-   forward at SF or PF, etc.). Bench spots accept anyone.
-5. When the board is full, the **15-year projection** runs and ranks every team.
+   forward at SF or PF, etc.). No bench. Every team's roster is visible to
+   everyone throughout the draft.
+5. When all fives are full, the **15-year projection** runs and ranks every team.
 
 ## The rules, encoded
 
@@ -33,7 +35,7 @@ No install, no backend, no internet required. Just open the page.
   whose turn it is.
 - **Positional requirements with flexibility** — every player has an `eligible`
   list of positions they can credibly play. You assign each pick to an open
-  starting slot or the bench.
+  starting slot.
 - **Guaranteed legal teams** — if a manager's remaining picks equal their unfilled
   starting slots, the game forces those picks onto starters so no one ends with a
   hole in the lineup.
@@ -42,18 +44,44 @@ No install, no backend, no internet required. Just open the page.
 
 ## The scoring model (`js/scoring.js`)
 
-Every roster plays a normalized 15-season career together (everyone a rookie in
-year 0, everyone aging in lockstep). Three pillars drive a player's value each
-season:
+The question the game answers: **"If you were building a team today around a
+player's entire career, who would you pick?"** Every roster plays a normalized
+15-season career together (everyone a rookie in year 0, everyone aging in
+lockstep). Players who haven't played 15 years yet are projected forward, so a
+generational young talent like Wembanyama rates as a top pick.
+
+Three pillars drive a player's value, with **talent doing most of the work**:
 
 | Pillar | What it captures |
 | --- | --- |
-| **Peak ability** | Position-aware overall from a career-peak skill profile (scoring, shooting, playmaking, rebounding, perimeter & interior defense, athleticism, IQ), with a peak-skill bonus so elite specialists aren't dragged to the mean. |
+| **Peak ability** | Position-aware overall from a career-peak skill profile, rewarding elite top-end skills and on-ball shot creation — what separates a franchise #1 from a great role player. Inner-circle stars land in the 90s. |
 | **Career arc** | A rookie→year-15 curve, shaped per player by `earlyImpact` (great right away?) and `aging` (does the game age well — skill/IQ players sustain, athleticism-reliant ones fade). |
-| **Durability** | `injuryRisk` is a career-long discount on availability (a risk factor, not a season-by-season injury sim). Bench depth insures against it. |
+| **Durability** | `injuryRisk` is a *moderate* career discount, not a gutting — a fragile former-MVP (Embiid) still rates well above an excellent role player, because you'd still build around the talent. |
 
-The headline **Career rating** blends peak ability with the durability- and
-aging-adjusted career average, nudged by the intangibles below.
+The headline **Career rating** is talent-dominant, lightly boosted for longevity
+(graceful aging + durability) and nudged by intangibles (mostly teammate
+elevation; winning is a light touch). This is why LeBron's all-time 15-year
+career lands in the mid-90s, fragile stars like Kawhi/Embiid/Klay stay high
+despite injury risk, and proven winners get a small bump rather than a big one.
+
+On top of talent, each lineup earns a **team-fit / chemistry** grade combining
+on-court fit with human factors:
+
+- **Spacing** — enough shooting; two non-spacing bigs is penalized.
+- **Playmaking** — needs a real engine.
+- **Defense** — blends perimeter & interior; rewards a rim protector and a stopper.
+- **Rebounding** — don't get killed on the glass.
+- **Shot hierarchy** — a clear go-to scorer matters, especially in the playoffs.
+- **Elevators** (`elevates`) — players who make teammates better lift the whole.
+- **Alpha clash** (`ballDominance`) — stacking ball-dominant stars who all need
+  the rock is penalized; off-ball fits are rewarded.
+- **Culture & coachability** — a potential team cancer poisons the room; great
+  culture and system-fit lift it.
+
+The board's **Fit** number is "how much does this pick help *your* roster right
+now?" — your career rating plus bonuses for filling open needs, minus redundancy
+penalties. On an empty roster every great player reads ~100; as you fill needs,
+fit settles toward the player's raw rating.
 
 On top of talent, each lineup earns a **team-fit / chemistry** grade combining
 on-court fit with human factors:

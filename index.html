@@ -39,11 +39,7 @@
           <select id="num-managers"></select>
         </div>
 
-        <div class="field">
-          <label for="bench-size">Bench spots per team</label>
-          <select id="bench-size"></select>
-          <span class="hint">Bench depth insures against injuries and aging in the 15-year sim.</span>
-        </div>
+        <p class="hint">Each manager drafts a starting five — PG, SG, SF, PF and C. No bench.</p>
 
         <div id="manager-names" class="manager-names"></div>
 
@@ -80,16 +76,21 @@
               <option value="durable">Sort: Most durable</option>
             </select>
           </div>
+          <p class="legend">
+            <b>Rating</b> = career build-around value (talent over a full 15-yr
+            career, lightly adjusted for longevity, durability & intangibles).
+            <b>Peak</b> = best-self ability. <b>Fit</b> = how much this pick helps
+            <i>your</i> roster right now (rating + filling open needs − redundancy).
+          </p>
           <div id="player-list" class="player-list"></div>
         </div>
 
-        <!-- Rosters -->
+        <!-- All rosters, visible the whole draft -->
         <aside class="rosters card">
           <div class="rosters-head">
-            <h3>Rosters</h3>
-            <select id="roster-view"></select>
+            <h3>All rosters</h3>
           </div>
-          <div id="roster-detail"></div>
+          <div id="all-rosters"></div>
         </aside>
       </div>
     </section>

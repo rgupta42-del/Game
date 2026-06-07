@@ -33,9 +33,10 @@ const POS_WEIGHTS = {
 };
 
 /**
- * Career-PEAK overall rating from a player's skill profile, judged against their
- * primary position, with a peak-skill bonus so elite specialists are valued for
- * what makes them great rather than dragged to the mean.
+ * Career-PEAK overall (0..99): how good a player is at their best — i.e. how
+ * good a centerpiece you'd be building around. We reward elite top-end skills
+ * and on-ball shot creation (what separates a franchise #1 from a great role
+ * player), so the scale puts inner-circle stars in the 90s.
  */
 function peakOverall(player) {
   const r = player.ratings;
@@ -43,10 +44,14 @@ function peakOverall(player) {
   let base = 0;
   for (const k in w) base += r[k] * w[k];
 
-  const top3 = Object.values(r).sort((a, b) => b - a).slice(0, 3);
-  const top3avg = top3.reduce((s, v) => s + v, 0) / top3.length;
+  const sorted = Object.values(r).sort((a, b) => b - a);
+  const top3 = (sorted[0] + sorted[1] + sorted[2]) / 3;
 
-  return Math.round(base * 0.8 + top3avg * 0.2);
+  // "Can you be the #1 option?" — elite scoring/creation is the separator.
+  const creation = r.scoring * 0.55 + r.playmaking * 0.25 + Math.max(r.shooting, r.scoring) * 0.20;
+
+  const val = base * 0.45 + top3 * 0.30 + creation * 0.25;
+  return Math.round(clamp(val, 0, 99));
 }
 
 /**
@@ -66,14 +71,15 @@ function careerArc(t, earlyImpact, aging) {
 }
 
 /**
- * Fraction of a career season a player is available. Injury risk is the
- * dominant factor (a flat-ish career discount), with a small extra toll in the
- * later seasons. This is a risk *discount*, not a season-by-season injury sim.
+ * Fraction of a career season a player is available. Injury risk is a *moderate*
+ * discount, not a gutting: even fragile stars (Embiid, Kawhi, Klay) still give
+ * you a lot of high-level basketball over a career — you'd still build around
+ * them. This is a risk discount, not a season-by-season injury sim.
  */
 function availability(player, t) {
-  const base = 1 - (player.injuryRisk / 100) * 0.5;
-  const lateWear = t >= 10 ? (t - 9) * 0.012 : 0;
-  return clamp(base - lateWear, 0.3, 1);
+  const base = 1 - (player.injuryRisk / 100) * 0.3;
+  const lateWear = t >= 11 ? (t - 10) * 0.008 : 0;
+  return clamp(base - lateWear, 0.5, 1);
 }
 
 /** Raw (pre-availability) value of a player in career season t. */
@@ -87,21 +93,33 @@ function effectiveSeasonValue(player, t) {
 }
 
 /**
- * Headline CAREER rating (0..99). Blends peak ability with the durability- and
- * aging-adjusted career average, then nudges for the intangibles that define a
- * great career (winning, lifting teammates, culture). This is what lets a
- * proven 15-year career (LeBron) edge a brilliant current peak (SGA), and what
- * docks the oft-injured (Kawhi, Embiid, Klay).
+ * Headline CAREER rating (0..99) — "if you were building a team today around
+ * this player's entire career, how valuable is he?"
+ *
+ * Talent (peak ability) dominates. A LONGEVITY term lightly rewards careers that
+ * stay productive across the 15-year window (graceful aging + durability), and a
+ * small INTANGIBLE nudge accounts for lifting teammates and winning. Injury and
+ * winning are deliberately modest so a fragile former-MVP (Embiid) still rates
+ * well above an excellent role player (Derrick White), and so inner-circle
+ * talents land in the 90s.
  */
 function careerRating(player) {
-  let sum = 0;
-  for (let t = 0; t < PROJECTION_YEARS; t++) sum += effectiveSeasonValue(player, t);
-  const avgEff = sum / PROJECTION_YEARS;
   const peak = peakOverall(player);
 
+  // Average of the career arc (how much elite value across 15 seasons).
+  let arcSum = 0;
+  for (let t = 0; t < PROJECTION_YEARS; t++) {
+    arcSum += careerArc(t, player.career.earlyImpact, player.career.aging);
+  }
+  const arcAvg = arcSum / PROJECTION_YEARS;
+  const durability = 1 - (player.injuryRisk / 100) * 0.22; // gentle career haircut
+  const longevity = arcAvg * durability; // ~0.6 .. 1.0
+
   const c = player.career;
-  const intangible = c.winning * 0.4 + c.elevates * 0.4 + c.culture * 0.2; // 0..100
-  const val = peak * 0.5 + avgEff * 0.5 + (intangible - 65) / 8;
+  // Intangibles lean on teammate elevation (talent-adjacent); winning is a light touch.
+  const intangibleNudge = (c.elevates - 75) / 14 + (c.winning - 75) / 40;
+
+  const val = peak * 0.88 + peak * longevity * 0.12 + intangibleNudge;
   return clamp(Math.round(val), 0, 99);
 }
 
@@ -241,7 +259,7 @@ function projectSeason(roster, t) {
   const avgWinning = starters.reduce((s, p) => s + p.career.winning, 0) / filledSlots;
 
   const playoffStrength =
-    best * 0.38 + top3Avg * 0.25 + chemistry * 0.16 + avgStarterValue * 0.10 + avgWinning * 0.11;
+    best * 0.40 + top3Avg * 0.27 + chemistry * 0.17 + avgStarterValue * 0.10 + avgWinning * 0.06;
   const playoffIndex = clamp((playoffStrength - 45) * 1.6, 0, 100) * completeness;
   const titleProb = clamp((playoffStrength - 78) / 38, 0, 1) ** 1.5 * completeness;
 
@@ -346,9 +364,15 @@ function buildBreakdown(roster, avgPlayoffIndex, titlesExpected) {
 // --------------------------------------------------------------------------
 
 /**
- * A 0..100 "fit grade" for adding `player` to `roster`, powering the draft-board
- * hints and CPU picks. Blends career value with how the player shores up current
- * weaknesses, minus penalties for stacking alphas or adding a locker-room risk.
+ * FIT (0..100) — "how much does drafting this player help THIS roster right now?"
+ *
+ * It starts from the player's career rating and adds bonuses for filling the
+ * roster's current gaps (shooting, rim protection, playmaking, a #1 scorer,
+ * and an open position), minus penalties for stacking ball-dominant alphas or
+ * adding a locker-room risk. Because it's capped at 100, an elite player on an
+ * empty roster (every need open) reads as a perfect ~100 fit; as the roster
+ * fills and needs disappear, the same player's fit naturally settles toward his
+ * raw rating. A redundant or clashing addition drops below it.
  */
 function pickFitGrade(roster, player, pos) {
   const career = careerRating(player);
@@ -362,19 +386,22 @@ function pickFitGrade(roster, player, pos) {
   const hasEngine = starters.some((p) => r(p).playmaking >= 82);
   const hasScorer = starters.some((p) => r(p).scoring >= 88);
 
-  if (!hasShooting && player.ratings.shooting >= 74) need += 8;
-  if (!hasRim && player.ratings.interiorD >= 82) need += 8;
-  if (!hasEngine && player.ratings.playmaking >= 82) need += 8;
-  if (!hasScorer && player.ratings.scoring >= 88) need += 8;
+  if (!hasShooting && player.ratings.shooting >= 74) need += 5;
+  if (!hasRim && player.ratings.interiorD >= 82) need += 5;
+  if (!hasEngine && player.ratings.playmaking >= 82) need += 5;
+  if (!hasScorer && player.ratings.scoring >= 88) need += 5;
+  // Filling a still-open starting position is itself valuable.
+  if (pos && pos !== "BENCH" && !roster.starters[pos]) need += 6;
 
   // Penalize stacking another alpha when an alpha is already aboard.
   const alphas = starters.filter((p) => c(p).ballDominance >= 85).length;
   const alphaPenalty = alphas >= 1 && c(player).ballDominance >= 85 ? 6 : 0;
 
-  // Slight penalty for adding a locker-room risk.
-  const culturePenalty = c(player).culture < 50 ? (50 - c(player).culture) * 0.12 : 0;
+  // Slight penalty for adding a locker-room risk to an existing group.
+  const culturePenalty =
+    starters.length > 0 && c(player).culture < 50 ? (50 - c(player).culture) * 0.12 : 0;
 
-  return clamp(career * 0.78 + need - alphaPenalty - culturePenalty, 0, 100);
+  return clamp(career + need - alphaPenalty - culturePenalty, 0, 100);
 }
 
 // --------------------------------------------------------------------------

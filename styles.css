@@ -151,9 +151,20 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .skill .bar { flex: 1; height: 6px; background: #11141a; border-radius: 4px; overflow: hidden; }
 .skill .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--good)); }
 
+/* ---------------- Legend ---------------- */
+.legend { font-size: 12px; color: var(--muted); line-height: 1.5; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin: 0 0 12px; }
+.legend b { color: var(--text); }
+
 /* ---------------- Rosters ---------------- */
 .rosters-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; }
 .rosters-head h3 { margin: 0; }
+#all-rosters { display: flex; flex-direction: column; gap: 12px; max-height: 66vh; overflow-y: auto; padding-right: 4px; }
+.team-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.015); }
+.team-card.on-clock { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.team-card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.team-name { font-weight: 800; font-size: 15px; }
+.team-fill { font-size: 11px; color: var(--muted); }
+.team-card.on-clock .team-fill { color: var(--accent); font-weight: 700; }
 .slot-row {
   display: grid; grid-template-columns: 46px 1fr auto; gap: 10px; align-items: center;
   padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 7px; background: var(--panel-2);
