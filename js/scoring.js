@@ -47,19 +47,18 @@ function peakOverall(player) {
   const sorted = Object.values(r).sort((a, b) => b - a);
   const top3 = (sorted[0] + sorted[1] + sorted[2]) / 3;
 
-  // "Can you be the #1 option?" — elite scoring/creation is the separator.
+  // "Can you be the #1 option?" — elite scoring/creation is one separator...
   const creation = r.scoring * 0.55 + r.playmaking * 0.25 + Math.max(r.shooting, r.scoring) * 0.20;
 
-  // Two-way credit: shutdown perimeter D, steals and rim-protecting blocks add
-  // a little value on top (a small, centered bonus so it doesn't distort scale).
+  // ...but two-way ability is talent too. Shutdown perimeter D, steals and
+  // rim-protecting blocks are a real component of how good a player is, so a
+  // one-way scorer has a lower ceiling than an equally-skilled two-way player.
   const e = player.ext || {};
-  const defScore =
-    r.perimeterD * 0.3 + r.interiorD * 0.3 +
-    (e.steals != null ? e.steals : r.perimeterD) * 0.2 +
-    (e.blocks != null ? e.blocks : r.interiorD) * 0.2;
-  const defBonus = (defScore - 70) * 0.06;
+  const defComposite =
+    (r.perimeterD + r.interiorD + (e.steals != null ? e.steals : r.perimeterD) +
+      (e.blocks != null ? e.blocks : r.interiorD)) / 4;
 
-  const val = base * 0.45 + top3 * 0.30 + creation * 0.25 + defBonus;
+  const val = base * 0.40 + top3 * 0.25 + creation * 0.17 + defComposite * 0.18;
   return Math.round(clamp(val, 0, 99));
 }
 
@@ -124,14 +123,21 @@ function careerRating(player) {
   const durability = 1 - (player.injuryRisk / 100) * 0.22; // gentle career haircut
   const longevity = arcAvg * durability; // ~0.6 .. 1.0
 
+  const r = player.ratings;
   const c = player.career;
   const e = player.ext || {};
-  // Intangibles lean on teammate elevation (talent-adjacent); winning and clutch
-  // are light touches.
-  const intangibleNudge =
-    (c.elevates - 75) / 14 + (c.winning - 75) / 40 + ((e.clutch != null ? e.clutch : 70) - 75) / 40;
+  const defComposite =
+    (r.perimeterD + r.interiorD + (e.steals != null ? e.steals : r.perimeterD) +
+      (e.blocks != null ? e.blocks : r.interiorD)) / 4;
 
-  const val = peak * 0.88 + peak * longevity * 0.12 + intangibleNudge;
+  // A player's career value is dominated by talent, but lifted by floor-raising
+  // (elevates) and by being a two-way winner who shows up in big moments
+  // (winning + clutch + defense). This separates proven two-way winners from
+  // empty-stats, one-way, non-clutch ball-handlers.
+  const twoWayWinning = c.winning * 0.45 + (e.clutch != null ? e.clutch : 70) * 0.25 + defComposite * 0.30;
+  const intangibleNudge = (c.elevates - 74) / 10 + (twoWayWinning - 68) / 9;
+
+  const val = peak * 0.85 + peak * longevity * 0.13 + intangibleNudge;
   return clamp(Math.round(val), 0, 99);
 }
 
@@ -191,13 +197,13 @@ function offensiveBalance(starters) {
   else score -= 16; // no one who can create offense
 
   if (creators === 2) score += 4; // a healthy 1-2 punch
-  if (creators === 3) score -= 12; // logjam
-  if (creators >= 4) score -= 22;
+  if (creators === 3) score -= 8; // logjam (softened — stars can share)
+  if (creators >= 4) score -= 14;
 
   score += Math.min(offBallShooters, 3) * 4; // complementary spacers
 
   const avgU = u.reduce((a, b) => a + b, 0) / u.length;
-  if (avgU >= 78) score -= (avgU - 78) * 1.3; // too many mouths to feed
+  if (avgU >= 80) score -= (avgU - 80) * 1.0; // too many mouths to feed
 
   return clamp(score, 0, 100);
 }
@@ -362,8 +368,9 @@ function chemistryForLineup(starters) {
   const offBalance = offensiveBalance(starters);
 
   // Pairwise roster-construction synergy: how the specific players fit together.
+  // Kept deliberately modest — fit shades chemistry, it doesn't dominate it.
   const syn = teamSynergy(starters);
-  const synAdj = clamp(syn.off, -18, 14) * 0.5 + clamp(syn.def, -12, 18) * 0.5;
+  const synAdj = clamp(syn.off, -14, 12) * 0.35 + clamp(syn.def, -8, 14) * 0.35;
 
   // A team cancer poisons the room more than the averages suggest.
   const worstCulture = Math.min(...starters.map((p) => c(p).culture));
@@ -378,7 +385,7 @@ function chemistryForLineup(starters) {
 // --------------------------------------------------------------------------
 
 function strengthToWins(strength) {
-  return clamp(9 + (strength - 40) * 1.25, 15, 73);
+  return clamp(18 + (strength - 40) * 1.3, 15, 73);
 }
 
 /** Project a single career season (t). Bench depth covers faded/aged starters. */
@@ -418,8 +425,10 @@ function projectSeason(roster, t) {
   const avgElevates = starters.reduce((s, p) => s + p.career.elevates, 0) / filledSlots;
   const elevateBoost = (avgElevates - 70) * 0.06;
 
+  // Talent dominates; chemistry/fit shades the result rather than deciding it,
+  // so a loaded-but-imperfect superteam still wins a lot.
   const strength =
-    (avgStarterValue * 0.7 + chemistry * 0.3 + elevateBoost) * (0.55 + 0.45 * completeness);
+    (avgStarterValue * 0.8 + chemistry * 0.2 + elevateBoost) * (0.6 + 0.4 * completeness);
   const wins = strengthToWins(strength);
 
   // Playoffs reward star power, defense, fit and proven winners.
@@ -439,7 +448,7 @@ function projectSeason(roster, t) {
 
   // Per-season championship probability (capped); summed over 15 years this lands
   // a dynasty around 3-5 titles, a contender ~1-2, a pretender ~0.
-  const titleProb = clamp((playoffStrength - 72) / 22, 0, 1) ** 1.6 * 0.55 * completeness;
+  const titleProb = clamp((playoffStrength - 66) / 22, 0, 1) ** 1.6 * 0.55 * completeness;
 
   return { wins, playoffIndex, titleProb, avgStarterValue, chemistry };
 }
@@ -595,20 +604,20 @@ function pickFitGrade(roster, player, pos) {
   let usageAdj = 0;
   if (c(player).ballDominance >= 80) {
     if (curCreators === 0) usageAdj += 3; // you need someone to create
-    else if (curCreators === 1) usageAdj -= 2;
-    else usageAdj -= 8; // usage logjam
+    else if (curCreators === 1) usageAdj -= 1;
+    else usageAdj -= 5; // usage logjam (softened)
   } else if (curCreators >= 1 && c(player).ballDominance <= 62 && player.ratings.shooting >= 72) {
     usageAdj += 4; // off-ball spacer next to your creators
   }
 
   // Pairwise synergy with the players already on the roster: does this pick make
-  // the current group better or worse (and vice versa)?
+  // the current group better or worse? Kept modest so talent leads the board.
   let synFit = 0;
   for (const mate of starters) {
     const s = pairSynergy(player, mate);
     synFit += s.off + s.def;
   }
-  synFit = clamp(synFit, -14, 12) * 0.5;
+  synFit = clamp(synFit, -10, 8) * 0.35;
 
   // A little extra value for proven clutch closers.
   const clutchFit = ((ext(player).clutch != null ? ext(player).clutch : 70) - 72) * 0.04;

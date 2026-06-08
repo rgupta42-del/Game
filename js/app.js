@@ -113,24 +113,25 @@
     game.managers.forEach((m) => {
       if (!m.isCpu) return;
       cpuProfiles[m.id] = {
-        temp: 2.5 + Math.random() * 3, // 2.5 (greedy) .. 5.5 (more random)
+        temp: 1.4 + Math.random() * 1.2, // 1.4 (greedy) .. 2.6 — mostly takes the best
         style: CPU_STYLES[Math.floor(Math.random() * CPU_STYLES.length)],
       };
     });
   }
 
-  /** A small style nudge (±a few points) so each CPU leans a certain way. */
+  /** A small style lean (±a couple points) — enough to differentiate CPUs,
+   *  not enough to make them pass a clearly better player. */
   function cpuStyleBonus(player, style) {
     const r = player.ratings;
     const c = player.career;
     switch (style) {
-      case "peak": return (peakOverall(player) - 80) * 0.18;
-      case "winning": return (c.winning - 75) * 0.12;
-      case "defense": return ((r.perimeterD + r.interiorD) / 2 - 70) * 0.12;
-      case "spacing": return (r.shooting - 70) * 0.12;
-      case "playmaking": return (r.playmaking - 70) * 0.12;
-      case "twoway": return ((r.perimeterD + r.scoring) / 2 - 75) * 0.12;
-      case "upside": return (c.aging - 75) * 0.10 + (c.earlyImpact - 60) * 0.05;
+      case "peak": return (peakOverall(player) - 80) * 0.08;
+      case "winning": return (c.winning - 75) * 0.06;
+      case "defense": return ((r.perimeterD + r.interiorD) / 2 - 70) * 0.06;
+      case "spacing": return (r.shooting - 70) * 0.06;
+      case "playmaking": return (r.playmaking - 70) * 0.06;
+      case "twoway": return ((r.perimeterD + r.scoring) / 2 - 75) * 0.06;
+      case "upside": return (c.aging - 75) * 0.05 + (c.earlyImpact - 60) * 0.025;
       default: return 0; // "best" — pure fit, just sampled
     }
   }
@@ -222,16 +223,22 @@
 
     const prof = cpuProfiles[manager.id] || { temp: 3.5, style: "best" };
 
-    // Grade every legal player by fit, plus this CPU's style lean.
+    // Grade leads with talent (career rating) so the best player isn't lost to
+    // the fit cap on an open roster; fit nudges toward filling needs, and the
+    // style lean adds a little personality.
     const graded = avail
-      .map((p) => ({ p, g: bestFit(manager, p) + cpuStyleBonus(p, prof.style) }))
+      .map((p) => ({
+        p,
+        g: careerRating(p) + 0.15 * (bestFit(manager, p) - 80) + cpuStyleBonus(p, prof.style),
+      }))
       .sort((a, b) => b.g - a.g);
 
-    // Consider the strong options (within a margin of the best, capped), then
-    // sample among them weighted toward the better picks — tactical, not fixed.
+    // Consider only the genuinely close options (within a tight margin of the
+    // best), then sample among them weighted steeply toward the best — so the
+    // CPU reliably takes a top player but isn't perfectly predictable.
     const top = graded[0].g;
-    const MARGIN = 9;
-    const pool = graded.filter((x) => x.g >= top - MARGIN).slice(0, 6);
+    const MARGIN = 3;
+    const pool = graded.filter((x) => x.g >= top - MARGIN).slice(0, 4);
     const weights = pool.map((x) => Math.exp((x.g - top) / prof.temp));
     const best = weightedPick(pool.map((x) => x.p), weights);
 

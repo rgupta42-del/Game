@@ -54,15 +54,18 @@ Three pillars drive a player's value, with **talent doing most of the work**:
 
 | Pillar | What it captures |
 | --- | --- |
-| **Peak ability** | Position-aware overall from a career-peak skill profile, rewarding elite top-end skills and on-ball shot creation — what separates a franchise #1 from a great role player. Inner-circle stars land in the 90s. |
+| **Peak ability** | Position-aware overall from a career-peak skill profile. Rewards elite top-end skills and on-ball creation, **but two-way defense (incl. steals & blocks) is talent too** — so a one-way scorer has a lower ceiling than an equally-skilled two-way player. Inner-circle stars land in the 90s. |
 | **Career arc** | A rookie→year-15 curve, shaped per player by `earlyImpact` (great right away?) and `aging` (does the game age well — skill/IQ players sustain, athleticism-reliant ones fade). |
 | **Durability** | `injuryRisk` is a *moderate* career discount, not a gutting — a fragile former-MVP (Embiid) still rates well above an excellent role player, because you'd still build around the talent. |
 
 The headline **Career rating** is talent-dominant, lightly boosted for longevity
-(graceful aging + durability) and nudged by intangibles (mostly teammate
-elevation; winning is a light touch). This is why LeBron's all-time 15-year
-career lands in the mid-90s, fragile stars like Kawhi/Embiid/Klay stay high
-despite injury risk, and proven winners get a small bump rather than a big one.
+(graceful aging + durability) and lifted by floor-raising (`elevates`) and by
+being a **two-way winner who shows up in big moments** (winning + clutch +
+defense). This is why LeBron is the clear top pick, proven two-way winners
+(Jaylen Brown, Klay) rate well above empty-stats one-way ball-handlers (Trae,
+Harden, LaMelo), and fragile former-MVPs (Embiid, Kawhi) stay high despite injury
+risk. **Talent leads; team-fit/chemistry shades the result rather than deciding
+it**, so a loaded-but-imperfect superteam still wins a lot.
 
 On top of talent, each lineup earns a **team-fit / chemistry** grade combining
 on-court fit with human factors:
