@@ -58,7 +58,7 @@ function peakOverall(player) {
     (r.perimeterD + r.interiorD + (e.steals != null ? e.steals : r.perimeterD) +
       (e.blocks != null ? e.blocks : r.interiorD)) / 4;
 
-  const val = base * 0.40 + top3 * 0.25 + creation * 0.17 + defComposite * 0.18;
+  const val = base * 0.38 + top3 * 0.23 + creation * 0.25 + defComposite * 0.14;
   return Math.round(clamp(val, 0, 99));
 }
 
@@ -135,7 +135,18 @@ function careerRating(player) {
   // (winning + clutch + defense). This separates proven two-way winners from
   // empty-stats, one-way, non-clutch ball-handlers.
   const twoWayWinning = c.winning * 0.45 + (e.clutch != null ? e.clutch : 70) * 0.25 + defComposite * 0.30;
-  const intangibleNudge = (c.elevates - 74) / 10 + (twoWayWinning - 68) / 9;
+
+  // Efficiency matters: inefficient, turnover-prone volume scorers (Trae,
+  // LaMelo) get docked; efficient, careful creators (Curry, CP3) get a boost.
+  const eff = e.efficiency != null ? e.efficiency : 70;
+  const tov = e.turnovers != null ? e.turnovers : 42;
+  const efficiencyNudge = (eff - 72) / 15 - (tov - 44) / 24;
+
+  // Pure non-scorers (elite defenders with little offense) are good, but not on
+  // the level of shot creators who play serviceable defense.
+  const scoringFloor = Math.max(0, 66 - r.scoring) * 0.18;
+
+  const intangibleNudge = (c.elevates - 74) / 11 + (twoWayWinning - 68) / 10 + efficiencyNudge - scoringFloor;
 
   const val = peak * 0.85 + peak * longevity * 0.13 + intangibleNudge;
   return clamp(Math.round(val), 0, 99);
@@ -182,28 +193,24 @@ function offensiveBalance(starters) {
   if (starters.length === 0) return 50;
   const r = (p) => p.ratings;
   const c = (p) => p.career;
-  const u = starters.map((p) => c(p).ballDominance);
 
   const creators = starters.filter((p) => c(p).ballDominance >= 80).length;
   const initiators = starters.filter(
     (p) => c(p).ballDominance >= 72 && r(p).playmaking >= 80
   ).length;
-  const offBallShooters = starters.filter(
-    (p) => c(p).ballDominance <= 62 && r(p).shooting >= 74
-  ).length;
+  const shooters = starters.filter((p) => r(p).shooting >= 74).length;
 
-  let score = 70;
-  if (creators >= 1 || initiators >= 1) score += 8;
+  // Only "rigid" creators clog — high-usage players who can't space the floor.
+  // Elite high-usage shooters (Curry, Edwards, Tatum) play off the ball and
+  // coexist just fine, the way they do in the Olympics / All-Star settings.
+  const rigid = starters.filter((p) => c(p).ballDominance >= 80 && r(p).shooting < 72).length;
+
+  let score = 72;
+  if (creators >= 1 || initiators >= 1) score += 6;
   else score -= 16; // no one who can create offense
 
-  if (creators === 2) score += 4; // a healthy 1-2 punch
-  if (creators === 3) score -= 8; // logjam (softened — stars can share)
-  if (creators >= 4) score -= 14;
-
-  score += Math.min(offBallShooters, 3) * 4; // complementary spacers
-
-  const avgU = u.reduce((a, b) => a + b, 0) / u.length;
-  if (avgU >= 80) score -= (avgU - 80) * 1.0; // too many mouths to feed
+  if (rigid >= 2) score -= (rigid - 1) * 7; // multiple non-spacing ball-stoppers
+  score += Math.min(shooters, 4) * 2.5; // floor spacing helps everyone fit
 
   return clamp(score, 0, 100);
 }
@@ -233,12 +240,17 @@ function pairSynergy(a, b) {
   const bRim = Math.max(eb.blocks || 0, rb.interiorD);
 
   // --- OFFENSE ---
+  // Two ball-dominant creators only clash if at least one can't play off the
+  // ball; elite shooters/high-IQ stars share the floor (Olympic-team logic).
   if (ca.ballDominance >= 80 && cb.ballDominance >= 80) {
-    off -= ((ca.ballDominance - 80) + (cb.ballDominance - 80)) * 0.18 + 3;
-    offReason = "both need the ball in iso to create";
+    const adaptA = ra.shooting * 0.6 + ra.iq * 0.4;
+    const adaptB = rb.shooting * 0.6 + rb.iq * 0.4;
+    const scale = clamp((82 - Math.min(adaptA, adaptB)) / 22, 0, 1); // adapt>=82 → none
+    const pen = (((ca.ballDominance - 80) + (cb.ballDominance - 80)) * 0.12 + 3) * scale;
+    if (pen > 0.5) { off -= pen; offReason = "both need the ball and can't play off it"; }
   }
   if (ea.interiorLoad >= 72 && eb.interiorLoad >= 72) {
-    off -= ((ea.interiorLoad - 72) + (eb.interiorLoad - 72)) * 0.15 + 3;
+    off -= ((ea.interiorLoad - 72) + (eb.interiorLoad - 72)) * 0.12 + 2;
     offReason = "both operate out of the paint/post — clogged spacing";
   }
   const aIsCreator = ra.playmaking >= rb.playmaking;
@@ -345,7 +357,7 @@ function chemistryForLineup(starters) {
   const avgSteals = avg((p) => ext(p).steals != null ? ext(p).steals : r(p).perimeterD);
   const avgBlocks = avg((p) => ext(p).blocks != null ? ext(p).blocks : r(p).interiorD);
   const hasRim = starters.some((p) => r(p).interiorD >= 82 || ext(p).blocks >= 82);
-  const hasStopper = starters.some((p) => r(p).perimeterD >= 84 || ext(p).steals >= 80);
+  const hasStopper = starters.some((p) => r(p).perimeterD >= 80 || ext(p).steals >= 72);
   let defense =
     avgPerimD * 0.3 + avgInteriorD * 0.28 + avgSteals * 0.2 + avgBlocks * 0.22 +
     (hasRim ? 7 : -10) + (hasStopper ? 6 : -6);
@@ -426,9 +438,10 @@ function projectSeason(roster, t) {
   const elevateBoost = (avgElevates - 70) * 0.06;
 
   // Talent dominates; chemistry/fit shades the result rather than deciding it,
-  // so a loaded-but-imperfect superteam still wins a lot.
+  // so a loaded-but-imperfect collection of elite players still wins a lot —
+  // elite players tend to figure out how to play together.
   const strength =
-    (avgStarterValue * 0.8 + chemistry * 0.2 + elevateBoost) * (0.6 + 0.4 * completeness);
+    (avgStarterValue * 0.85 + chemistry * 0.15 + elevateBoost) * (0.6 + 0.4 * completeness);
   const wins = strengthToWins(strength);
 
   // Playoffs reward star power, defense, fit and proven winners.
@@ -644,11 +657,12 @@ function analyzeRoster(roster) {
   const r = (p) => p.ratings;
   const first = (arr) => (arr.length ? arr[0].name : "");
 
+  const ex = (p) => p.ext || {};
   const scorers = s.filter((p) => r(p).scoring >= 88);
   const shooters = s.filter((p) => r(p).shooting >= 74);
   const engines = s.filter((p) => r(p).playmaking >= 82);
-  const rim = s.filter((p) => r(p).interiorD >= 82);
-  const stoppers = s.filter((p) => r(p).perimeterD >= 84);
+  const rim = s.filter((p) => r(p).interiorD >= 82 || ex(p).blocks >= 82);
+  const stoppers = s.filter((p) => r(p).perimeterD >= 80 || ex(p).steals >= 72);
   const boards = s.filter((p) => r(p).rebounding >= 80);
 
   const items = [
@@ -747,11 +761,12 @@ function teamStrengthsWeaknesses(roster) {
 function traitsProvided(player) {
   const r = player.ratings;
   const out = [];
+  const e = player.ext || {};
   if (r.scoring >= 88) out.push("creation");
-  if (r.interiorD >= 82) out.push("rim");
+  if (r.interiorD >= 82 || e.blocks >= 82) out.push("rim");
   if (r.shooting >= 74) out.push("spacing");
   if (r.playmaking >= 82) out.push("playmaking");
-  if (r.perimeterD >= 84) out.push("perimeterD");
+  if (r.perimeterD >= 80 || e.steals >= 72) out.push("perimeterD");
   if (r.rebounding >= 80) out.push("rebounding");
   return out;
 }

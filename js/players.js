@@ -385,6 +385,46 @@ const PLAYER_POOL = [
     lavine: { clutch: 60 },
   };
 
+  // Scoring efficiency (true-shooting, higher = better) and turnover-proneness
+  // (higher = worse). Inefficient, turnover-heavy volume scorers get docked;
+  // efficient, careful creators get a boost. Unlisted players default to neutral.
+  const EFFTOV = {
+    curry: { efficiency: 91, turnovers: 36 }, jokic: { efficiency: 92, turnovers: 42 },
+    durant: { efficiency: 90, turnovers: 34 }, sga: { efficiency: 86, turnovers: 38 },
+    lebron: { efficiency: 84, turnovers: 46 }, cp3: { efficiency: 82, turnovers: 14 },
+    kyrie: { efficiency: 84, turnovers: 38 }, mbridges: { efficiency: 82, turnovers: 24 },
+    klay: { efficiency: 86, turnovers: 22 }, dwhite: { efficiency: 80, turnovers: 30 },
+    bane: { efficiency: 83, turnovers: 30 }, reaves: { efficiency: 81, turnovers: 34 },
+    brunson: { efficiency: 80, turnovers: 32 }, tatum: { efficiency: 80, turnovers: 40 },
+    jbrown: { efficiency: 77, turnovers: 46 }, booker: { efficiency: 81, turnovers: 38 },
+    bam: { efficiency: 80, turnovers: 38 }, wemby: { efficiency: 80, turnovers: 46 },
+    mobley: { efficiency: 79, turnovers: 32 }, chet: { efficiency: 81, turnovers: 34 },
+    kat: { efficiency: 83, turnovers: 44 }, markkanen: { efficiency: 82, turnovers: 28 },
+    sabonis: { efficiency: 84, turnovers: 50 }, gobert: { efficiency: 88, turnovers: 40 },
+    jallen: { efficiency: 86, turnovers: 34 }, kessler: { efficiency: 86, turnovers: 30 },
+    agordon: { efficiency: 82, turnovers: 32 }, maxey: { efficiency: 78, turnovers: 36 },
+    halliburton: { efficiency: 82, turnovers: 28 }, edwards: { efficiency: 78, turnovers: 44 },
+    dlillard: { efficiency: 80, turnovers: 40 }, giannis: { efficiency: 84, turnovers: 58 },
+    jwilliams: { efficiency: 79, turnovers: 38 }, siakam: { efficiency: 78, turnovers: 36 },
+    mitchell: { efficiency: 76, turnovers: 44 }, derozan: { efficiency: 74, turnovers: 36 },
+    anunoby: { efficiency: 78, turnovers: 26 }, jjj: { efficiency: 76, turnovers: 36 },
+    paolo: { efficiency: 70, turnovers: 56 }, cade: { efficiency: 71, turnovers: 60 },
+    sengun: { efficiency: 76, turnovers: 60 }, embiid: { efficiency: 82, turnovers: 52 },
+    adavis: { efficiency: 82, turnovers: 42 }, scottie: { efficiency: 72, turnovers: 48 },
+    // inefficient / turnover-prone volume scorers
+    trae: { efficiency: 60, turnovers: 72 }, lamelo: { efficiency: 60, turnovers: 74 },
+    westbrook: { efficiency: 52, turnovers: 80 }, harden: { efficiency: 68, turnovers: 66 },
+    luka: { efficiency: 76, turnovers: 66 }, lavine: { efficiency: 74, turnovers: 40 },
+    herro: { efficiency: 70, turnovers: 42 }, fox: { efficiency: 70, turnovers: 50 },
+    bingram: { efficiency: 70, turnovers: 44 }, garland: { efficiency: 74, turnovers: 46 },
+    mcollum: { efficiency: 74, turnovers: 34 }, bmiller: { efficiency: 71, turnovers: 44 },
+    pgeorge: { efficiency: 76, turnovers: 40 }, fwagner: { efficiency: 74, turnovers: 44 },
+    murray: { efficiency: 78, turnovers: 36 }, jjohnson: { efficiency: 72, turnovers: 48 },
+    amen: { efficiency: 68, turnovers: 50 }, ddaniels: { efficiency: 70, turnovers: 36 },
+    turner: { efficiency: 80, turnovers: 28 }, kawhi: { efficiency: 82, turnovers: 30 },
+    butler: { efficiency: 82, turnovers: 38 },
+  };
+
   PLAYER_POOL.forEach((p) => {
     const r = p.ratings;
     const c = p.career;
@@ -401,8 +441,12 @@ const PLAYER_POOL = [
       interiorLoad: big
         ? clamp(Math.round(r.interiorD * 0.32 + r.rebounding * 0.3 + (100 - r.shooting) * 0.26 - 14), 8, 95)
         : clamp(Math.round(r.scoring * 0.12 + (100 - r.shooting) * 0.1), 5, 45),
+      // efficiency = scoring/true-shooting efficiency (default neutral)
+      efficiency: 70,
+      // turnovers = turnover-proneness, higher is worse (default neutral)
+      turnovers: 42,
     };
-    p.ext = Object.assign(derived, OVERRIDES[p.id] || {});
+    p.ext = Object.assign(derived, OVERRIDES[p.id] || {}, EFFTOV[p.id] || {});
   });
 })();
 

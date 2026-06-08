@@ -61,11 +61,21 @@ Three pillars drive a player's value, with **talent doing most of the work**:
 The headline **Career rating** is talent-dominant, lightly boosted for longevity
 (graceful aging + durability) and lifted by floor-raising (`elevates`) and by
 being a **two-way winner who shows up in big moments** (winning + clutch +
-defense). This is why LeBron is the clear top pick, proven two-way winners
-(Jaylen Brown, Klay) rate well above empty-stats one-way ball-handlers (Trae,
-Harden, LaMelo), and fragile former-MVPs (Embiid, Kawhi) stay high despite injury
-risk. **Talent leads; team-fit/chemistry shades the result rather than deciding
-it**, so a loaded-but-imperfect superteam still wins a lot.
+defense). **Scoring efficiency and turnovers** matter too: inefficient,
+turnover-prone volume scorers (Trae, LaMelo, Westbrook) get docked, while
+efficient, careful creators (Curry, CP3) get a boost. Pure non-scorers who win
+on defense alone are valuable but rated below shot creators who play serviceable
+defense (Draymond < Durant).
+
+Defense is sourced from perimeter D + steals (point-of-attack/disruption) and
+interior D + blocks (rim protection), so genuine perimeter stoppers (Tatum,
+Edwards) are credited correctly.
+
+**Talent leads; team-fit/chemistry shades the result rather than deciding it.**
+Elite, high-IQ players who can shoot/play off the ball coexist fine (the way they
+do in the Olympics / All-Star settings), so a roster of stars isn't punished for
+"usage" — only genuinely non-spacing ball-stoppers or stacked paint-bound bigs
+clog things up.
 
 On top of talent, each lineup earns a **team-fit / chemistry** grade combining
 on-court fit with human factors:
