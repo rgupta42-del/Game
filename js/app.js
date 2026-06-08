@@ -96,9 +96,54 @@
     const names = rows.map((r) => r.querySelector('input[type="text"]').value);
     const cpuFlags = rows.map((r) => r.querySelector('input[type="checkbox"]').checked);
     game = new DraftGame(names, { benchSize: 0, cpuFlags });
+    initCpuProfiles();
     buildDraftStaticUI();
     showScreen("#draft-screen");
     renderDraft();
+  }
+
+  // Each CPU gets its own temperament (how greedy vs. exploratory) and a draft
+  // "style" so different computer GMs build differently — and so the same human
+  // pick never yields the same CPU draft twice.
+  let cpuProfiles = {};
+  const CPU_STYLES = ["best", "peak", "winning", "defense", "spacing", "playmaking", "twoway", "upside"];
+
+  function initCpuProfiles() {
+    cpuProfiles = {};
+    game.managers.forEach((m) => {
+      if (!m.isCpu) return;
+      cpuProfiles[m.id] = {
+        temp: 2.5 + Math.random() * 3, // 2.5 (greedy) .. 5.5 (more random)
+        style: CPU_STYLES[Math.floor(Math.random() * CPU_STYLES.length)],
+      };
+    });
+  }
+
+  /** A small style nudge (±a few points) so each CPU leans a certain way. */
+  function cpuStyleBonus(player, style) {
+    const r = player.ratings;
+    const c = player.career;
+    switch (style) {
+      case "peak": return (peakOverall(player) - 80) * 0.18;
+      case "winning": return (c.winning - 75) * 0.12;
+      case "defense": return ((r.perimeterD + r.interiorD) / 2 - 70) * 0.12;
+      case "spacing": return (r.shooting - 70) * 0.12;
+      case "playmaking": return (r.playmaking - 70) * 0.12;
+      case "twoway": return ((r.perimeterD + r.scoring) / 2 - 75) * 0.12;
+      case "upside": return (c.aging - 75) * 0.10 + (c.earlyImpact - 60) * 0.05;
+      default: return 0; // "best" — pure fit, just sampled
+    }
+  }
+
+  /** Weighted random choice. */
+  function weightedPick(items, weights) {
+    const total = weights.reduce((a, b) => a + b, 0);
+    let x = Math.random() * total;
+    for (let i = 0; i < items.length; i++) {
+      x -= weights[i];
+      if (x <= 0) return items[i];
+    }
+    return items[items.length - 1];
   }
 
   // ========================================================================
@@ -175,15 +220,20 @@
     const avail = PLAYER_POOL.filter((p) => game.canDraft(manager, p));
     if (avail.length === 0) return null;
 
-    let best = null;
-    let bestGrade = -Infinity;
-    for (const p of avail) {
-      const grade = bestFit(manager, p);
-      if (grade > bestGrade) {
-        bestGrade = grade;
-        best = p;
-      }
-    }
+    const prof = cpuProfiles[manager.id] || { temp: 3.5, style: "best" };
+
+    // Grade every legal player by fit, plus this CPU's style lean.
+    const graded = avail
+      .map((p) => ({ p, g: bestFit(manager, p) + cpuStyleBonus(p, prof.style) }))
+      .sort((a, b) => b.g - a.g);
+
+    // Consider the strong options (within a margin of the best, capped), then
+    // sample among them weighted toward the better picks — tactical, not fixed.
+    const top = graded[0].g;
+    const MARGIN = 9;
+    const pool = graded.filter((x) => x.g >= top - MARGIN).slice(0, 6);
+    const weights = pool.map((x) => Math.exp((x.g - top) / prof.temp));
+    const best = weightedPick(pool.map((x) => x.p), weights);
 
     const legal = game.legalSlotsFor(manager, best);
     const starterSlots = legal.filter((s) => s !== "BENCH");
@@ -284,6 +334,7 @@
           <span class="tag pos">${p.eligible.join("/")}</span>
           <span class="tag" title="Career-peak ability">Peak ${peakOverall(p)}</span>
           <span class="tag" title="Winning / playoff pedigree">Win ${p.career.winning}</span>
+          <span class="tag" title="Usage rate (ball dominance ${p.career.ballDominance})">${SCORING.usageTier(p)}</span>
           <span class="tag">${p.archetype}</span>
           ${ui.sortBy === "fit" || canDraft ? `<span class="tag fit">Fit ${fit}</span>` : ""}
         </div>`;
@@ -522,10 +573,28 @@
     wrap.innerHTML = "";
     results.forEach((r, i) => {
       const ev = r.eval;
+      const m = r.manager;
       const team = el("div", "res-team");
 
-      const roster = SCORING.starterPlayers({ starters: r.manager.starters, bench: r.manager.bench });
-      const benchNames = r.manager.bench.filter(Boolean).map((p) => p.name);
+      // Clean position-by-position roster.
+      const rosterRows = STARTER_SLOTS.map((slot) => {
+        const p = m.starters[slot];
+        if (!p) return `<div class="res-slot empty"><span class="res-pos">${slot}</span><span class="res-pname">— empty —</span></div>`;
+        return `<div class="res-slot">
+            <span class="res-pos">${slot}</span>
+            <span class="res-pname">${p.name}</span>
+            <span class="res-ptag">${SCORING.usageTier(p)}</span>
+            <span class="res-prate">${careerRating(p)}</span>
+          </div>`;
+      }).join("");
+
+      // Strengths & weaknesses.
+      const sw = SCORING.teamStrengthsWeaknesses({ starters: m.starters, bench: [] });
+      const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+      const swList = (arr, cls, empty) =>
+        arr.length
+          ? arr.map((t) => `<li class="${cls}">${cap(t)}</li>`).join("")
+          : `<li class="muted">${empty}</li>`;
 
       const maxWins = 73;
       const bars = ev.seasons
@@ -536,17 +605,28 @@
         .join("");
 
       team.innerHTML = `
-        <h4>${i === 0 ? "🏆 " : ""}${r.manager.name}</h4>
+        <h4>${i === 0 ? "🏆 " : `#${i + 1} `}${m.isCpu ? "🤖 " : ""}${m.name}</h4>
         <div class="res-stats">
           <div class="res-stat"><b>${ev.avgRecord}</b>Avg season record</div>
           <div class="res-stat"><b>${ev.peakWins}</b>Peak wins</div>
           <div class="res-stat"><b>${ev.titlesExpected.toFixed(2)}</b>Expected titles (15 yr)</div>
+          <div class="res-stat"><b>${playoffLabel(ev.avgPlayoffIndex)}</b>Typical postseason</div>
           <div class="res-stat"><b>${Math.round(ev.composite)}</b>Composite score</div>
         </div>
-        <ul class="res-notes">${ev.breakdown.map((n) => `<li>${n}</li>`).join("")}</ul>
-        <div class="res-roster"><b>Starters:</b> ${roster.map((p) => `${p.name} (${p.pos})`).join(", ")}${
-        benchNames.length ? ` · <b>Bench:</b> ${benchNames.join(", ")}` : ""
-      }</div>
+        <div class="res-cols">
+          <div class="res-rostercard">
+            <div class="res-subhead">Starting five</div>
+            ${rosterRows}
+          </div>
+          <div class="res-swcard">
+            <div class="res-subhead">Team summary</div>
+            <div class="res-sw">
+              <div><div class="sw-head good">Strengths</div><ul>${swList(sw.strengths, "good", "No standout strengths")}</ul></div>
+              <div><div class="sw-head bad">Weaknesses</div><ul>${swList(sw.weaknesses, "bad", "No glaring weaknesses")}</ul></div>
+            </div>
+          </div>
+        </div>
+        <div class="res-subhead">15-year win trajectory</div>
         <div class="timeline">${bars}</div>`;
       wrap.appendChild(team);
     });

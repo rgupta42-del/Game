@@ -139,6 +139,58 @@ function starterPlayers(roster) {
 }
 
 // --------------------------------------------------------------------------
+//  Advanced metrics: usage / shot distribution
+// --------------------------------------------------------------------------
+
+/**
+ * `ballDominance` is our proxy for usage rate — how much a player needs the ball
+ * to be effective. A label for the UI.
+ */
+function usageTier(player) {
+  const u = player.career.ballDominance;
+  if (u >= 88) return "High usage";
+  if (u >= 72) return "Secondary";
+  if (u >= 55) return "Low usage";
+  return "Off-ball";
+}
+
+/**
+ * Offensive balance (0..100) — how well a lineup's usage/shot distribution fits
+ * together. There's only one ball: you want one or two high-usage creators (at
+ * least one true initiator), surrounded by lower-usage, off-ball shooters.
+ * Stacking three-plus ball-dominant scorers is a usage logjam.
+ */
+function offensiveBalance(starters) {
+  if (starters.length === 0) return 50;
+  const r = (p) => p.ratings;
+  const c = (p) => p.career;
+  const u = starters.map((p) => c(p).ballDominance);
+
+  const creators = starters.filter((p) => c(p).ballDominance >= 80).length;
+  const initiators = starters.filter(
+    (p) => c(p).ballDominance >= 72 && r(p).playmaking >= 80
+  ).length;
+  const offBallShooters = starters.filter(
+    (p) => c(p).ballDominance <= 62 && r(p).shooting >= 74
+  ).length;
+
+  let score = 70;
+  if (creators >= 1 || initiators >= 1) score += 8;
+  else score -= 16; // no one who can create offense
+
+  if (creators === 2) score += 4; // a healthy 1-2 punch
+  if (creators === 3) score -= 12; // logjam
+  if (creators >= 4) score -= 22;
+
+  score += Math.min(offBallShooters, 3) * 4; // complementary spacers
+
+  const avgU = u.reduce((a, b) => a + b, 0) / u.length;
+  if (avgU >= 78) score -= (avgU - 78) * 1.3; // too many mouths to feed
+
+  return clamp(score, 0, 100);
+}
+
+// --------------------------------------------------------------------------
 //  Team fit / chemistry
 // --------------------------------------------------------------------------
 
@@ -190,15 +242,14 @@ function chemistryForLineup(starters) {
   const avgCoach = avg((p) => c(p).coachability);
   const humanChem = avgElevates * 0.4 + avgCulture * 0.35 + avgCoach * 0.25;
 
-  // Alpha clash: stacking ball-dominant stars who all need the rock.
-  const alphas = starters.filter((p) => c(p).ballDominance >= 85).length;
-  const clashPenalty = alphas >= 3 ? 16 : alphas === 2 ? 7 : 0;
+  // Usage / shot-distribution fit (the advanced-stats lens on chemistry).
+  const offBalance = offensiveBalance(starters);
 
   // A team cancer poisons the room more than the averages suggest.
   const worstCulture = Math.min(...starters.map((p) => c(p).culture));
   const cancerPenalty = worstCulture < 45 ? (45 - worstCulture) * 0.4 : 0;
 
-  const chem = skillChem * 0.66 + humanChem * 0.34 - clashPenalty - cancerPenalty;
+  const chem = skillChem * 0.58 + humanChem * 0.27 + offBalance * 0.15 - cancerPenalty;
   return clamp(chem, 0, 100);
 }
 
@@ -332,8 +383,11 @@ function buildBreakdown(roster, avgPlayoffIndex, titlesExpected) {
   if (starters.some((p) => r(p).scoring >= 88)) notes.push("✅ Has a go-to bucket-getter for the playoffs.");
   else notes.push("⚠️ Lacks a true number-one scoring option.");
 
-  const alphas = starters.filter((p) => c(p).ballDominance >= 85).length;
-  if (alphas >= 2) notes.push(`⚠️ ${alphas} ball-dominant alphas — touches may clash.`);
+  const creators = starters.filter((p) => c(p).ballDominance >= 80).length;
+  const offBall = starters.filter((p) => c(p).ballDominance <= 62 && r(p).shooting >= 74).length;
+  if (creators >= 3) notes.push(`⚠️ Usage logjam — ${creators} ball-dominant scorers competing for one ball.`);
+  else if (creators >= 1 && offBall >= 2) notes.push("✅ Balanced shot distribution — creators surrounded by off-ball shooters.");
+  else if (creators === 0) notes.push("⚠️ No high-usage shot creator to generate offense.");
 
   const avgElevates = starters.reduce((s, p) => s + c(p).elevates, 0) / Math.max(1, starters.length);
   if (avgElevates >= 84) notes.push("✅ Roster full of teammate-elevators — plays bigger than the sum of its parts.");
@@ -393,15 +447,23 @@ function pickFitGrade(roster, player, pos) {
   // Filling a still-open starting position is itself valuable.
   if (pos && pos !== "BENCH" && !roster.starters[pos]) need += 6;
 
-  // Penalize stacking another alpha when an alpha is already aboard.
-  const alphas = starters.filter((p) => c(p).ballDominance >= 85).length;
-  const alphaPenalty = alphas >= 1 && c(player).ballDominance >= 85 ? 6 : 0;
+  // Usage / shot-distribution fit: you need a creator, but stacking ball-
+  // dominant scorers is a logjam, while off-ball shooters complement them.
+  const curCreators = starters.filter((p) => c(p).ballDominance >= 80).length;
+  let usageAdj = 0;
+  if (c(player).ballDominance >= 80) {
+    if (curCreators === 0) usageAdj += 3; // you need someone to create
+    else if (curCreators === 1) usageAdj -= 2;
+    else usageAdj -= 8; // usage logjam
+  } else if (curCreators >= 1 && c(player).ballDominance <= 62 && player.ratings.shooting >= 72) {
+    usageAdj += 4; // off-ball spacer next to your creators
+  }
 
   // Slight penalty for adding a locker-room risk to an existing group.
   const culturePenalty =
     starters.length > 0 && c(player).culture < 50 ? (50 - c(player).culture) * 0.12 : 0;
 
-  return clamp(career + need - alphaPenalty - culturePenalty, 0, 100);
+  return clamp(career + need + usageAdj - culturePenalty, 0, 100);
 }
 
 // --------------------------------------------------------------------------
@@ -455,6 +517,58 @@ function analyzeRoster(roster) {
   };
 }
 
+/**
+ * Concise strengths & weaknesses for the results page. Returns
+ * { strengths: string[], weaknesses: string[] } — short, plain-English phrases
+ * spanning talent, fit, usage balance, durability, aging and intangibles.
+ */
+function teamStrengthsWeaknesses(roster) {
+  const s = starterPlayers(roster);
+  const r = (p) => p.ratings;
+  const c = (p) => p.career;
+  const strengths = [];
+  const weaknesses = [];
+  if (s.length === 0) return { strengths, weaknesses };
+
+  const avg = (sel) => s.reduce((a, p) => a + sel(p), 0) / s.length;
+  const a = analyzeRoster(roster);
+
+  // On-court identity (from the shared analyzer).
+  const LABEL = {
+    creation: "go-to shot creation", rim: "rim protection", spacing: "floor spacing",
+    playmaking: "high-end playmaking", perimeterD: "perimeter defense", rebounding: "rebounding",
+  };
+  a.strengths.forEach((i) => strengths.push(LABEL[i.key]));
+  a.gaps.forEach((i) => weaknesses.push("lacks " + LABEL[i.key]));
+
+  // Usage / shot distribution.
+  const creators = s.filter((p) => c(p).ballDominance >= 80).length;
+  const offBall = s.filter((p) => c(p).ballDominance <= 62 && r(p).shooting >= 74).length;
+  if (creators >= 1 && offBall >= 2) strengths.push("balanced usage / shot distribution");
+  if (creators >= 3) weaknesses.push("usage logjam (too many ball-dominant scorers)");
+
+  // Defense overall.
+  const def = avg((p) => (r(p).perimeterD + r(p).interiorD) / 2);
+  if (def >= 78) strengths.push("elite two-way defense");
+  else if (def <= 60) weaknesses.push("leaky defense");
+
+  // Durability / aging / intangibles.
+  const avgInjury = avg((p) => p.injuryRisk);
+  if (avgInjury <= 30) strengths.push("durable, low-injury core");
+  else if (avgInjury >= 55) weaknesses.push("high injury risk");
+
+  const avgAging = avg((p) => c(p).aging);
+  if (avgAging >= 82) strengths.push("ages gracefully across the window");
+  else if (avgAging <= 65) weaknesses.push("athleticism-reliant, fades late");
+
+  if (avg((p) => c(p).winning) >= 85) strengths.push("proven playoff winners");
+  if (avg((p) => c(p).elevates) >= 85) strengths.push("teammate-elevators");
+  const worstCulture = Math.min(...s.map((p) => c(p).culture));
+  if (worstCulture < 45) weaknesses.push("locker-room risk");
+
+  return { strengths, weaknesses };
+}
+
 /** Which analysis gaps would `player` help address? Returns array of keys. */
 function traitsProvided(player) {
   const r = player.ratings;
@@ -486,6 +600,9 @@ const SCORING = {
   pickFitGrade,
   analyzeRoster,
   traitsProvided,
+  teamStrengthsWeaknesses,
+  usageTier,
+  offensiveBalance,
   rosterPlayers,
   starterPlayers,
   // Back-compat alias: the UI's "overall" badge now shows the career rating.

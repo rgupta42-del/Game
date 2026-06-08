@@ -229,6 +229,29 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .res-notes { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
 .res-notes li { font-size: 13px; color: var(--text); }
 .res-roster { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+/* results: roster + strengths/weaknesses */
+.res-subhead { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 14px 0 8px; }
+.res-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 720px) { .res-cols { grid-template-columns: 1fr; } }
+.res-rostercard, .res-swcard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.res-rostercard .res-subhead, .res-swcard .res-subhead { margin-top: 0; }
+.res-slot { display: grid; grid-template-columns: 34px 1fr auto auto; gap: 10px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.res-slot:last-child { border-bottom: none; }
+.res-slot.empty { opacity: 0.55; }
+.res-pos { font-weight: 800; color: var(--accent-2); }
+.res-pname { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.res-ptag { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 1px 7px; white-space: nowrap; }
+.res-prate { font-weight: 800; font-size: 15px; }
+.res-sw { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.sw-head { font-weight: 800; font-size: 12px; margin-bottom: 6px; }
+.sw-head.good { color: var(--good); }
+.sw-head.bad { color: var(--warn); }
+.res-sw ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.res-sw li { font-size: 12.5px; padding-left: 16px; position: relative; }
+.res-sw li.good::before { content: "✓"; position: absolute; left: 0; color: var(--good); }
+.res-sw li.bad::before { content: "✗"; position: absolute; left: 0; color: var(--warn); }
+.res-sw li.muted { padding-left: 0; color: var(--muted); }
 .timeline { display: flex; gap: 3px; align-items: flex-end; height: 60px; margin-top: 10px; }
 .timeline .bar { flex: 1; background: linear-gradient(180deg, var(--accent-2), #1d3a5c); border-radius: 3px 3px 0 0; min-height: 3px; position: relative; }
 .timeline .bar:hover::after {

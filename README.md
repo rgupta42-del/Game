@@ -73,29 +73,25 @@ on-court fit with human factors:
 - **Rebounding** — don't get killed on the glass.
 - **Shot hierarchy** — a clear go-to scorer matters, especially in the playoffs.
 - **Elevators** (`elevates`) — players who make teammates better lift the whole.
-- **Alpha clash** (`ballDominance`) — stacking ball-dominant stars who all need
-  the rock is penalized; off-ball fits are rewarded.
+- **Usage / shot distribution** (`ballDominance` as a usage-rate proxy) — there's
+  only one ball: you want one or two high-usage creators surrounded by off-ball
+  shooters. Stacking three-plus ball-dominant scorers is a usage logjam.
 - **Culture & coachability** — a potential team cancer poisons the room; great
   culture and system-fit lift it.
+
+**CPU drafters** are tactical but not deterministic: each computer GM gets a
+temperament and a draft style, then samples among its strongest available
+options (weighted toward the best), so the same human pick never yields the same
+CPU draft twice.
+
+The **results page** shows each team's clean position-by-position starting five
+(with usage tier and rating) plus a short strengths-and-weaknesses summary and a
+15-year win trajectory.
 
 The board's **Fit** number is "how much does this pick help *your* roster right
 now?" — your career rating plus bonuses for filling open needs, minus redundancy
 penalties. On an empty roster every great player reads ~100; as you fill needs,
 fit settles toward the player's raw rating.
-
-On top of talent, each lineup earns a **team-fit / chemistry** grade combining
-on-court fit with human factors:
-
-- **Spacing** — enough shooting; two non-spacing bigs is penalized.
-- **Playmaking** — needs a real engine.
-- **Defense** — blends perimeter & interior; rewards a rim protector and a stopper.
-- **Rebounding** — don't get killed on the glass.
-- **Shot hierarchy** — a clear go-to scorer matters, especially in the playoffs.
-- **Elevators** (`elevates`) — players who make teammates better lift the whole.
-- **Alpha clash** (`ballDominance`) — stacking ball-dominant stars who all need
-  the rock is penalized; off-ball fits are rewarded.
-- **Culture & coachability** — a potential team cancer poisons the room; great
-  culture and system-fit lift it.
 
 These produce, per season:
 
