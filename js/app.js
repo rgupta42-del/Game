@@ -333,7 +333,7 @@
         <div class="psub">
           <span class="tag pos">${p.eligible.join("/")}</span>
           <span class="tag" title="Career-peak ability">Peak ${peakOverall(p)}</span>
-          <span class="tag" title="Winning / playoff pedigree">Win ${p.career.winning}</span>
+          <span class="tag" title="Clutch shot-making">Clutch ${p.ext.clutch}</span>
           <span class="tag" title="Usage rate (ball dominance ${p.career.ballDominance})">${SCORING.usageTier(p)}</span>
           <span class="tag">${p.archetype}</span>
           ${ui.sortBy === "fit" || canDraft ? `<span class="tag fit">Fit ${fit}</span>` : ""}
@@ -562,7 +562,7 @@
         <div class="podium-rank">${medals[i] || `#${i + 1}`}</div>
         <div class="podium-name">${r.manager.name}</div>
         <div class="podium-record">Avg record ${r.eval.avgRecord}</div>
-        <div class="podium-record">${playoffLabel(r.eval.avgPlayoffIndex)} · ${r.eval.titlesExpected.toFixed(2)} titles</div>
+        <div class="podium-record">🏆 ${r.eval.championships} title${r.eval.championships === 1 ? "" : "s"} · peak ${r.eval.bestRecord}</div>
         <div class="podium-score">${Math.round(r.eval.composite)}</div>`;
       wrap.appendChild(card);
     });
@@ -596,6 +596,13 @@
           ? arr.map((t) => `<li class="${cls}">${cap(t)}</li>`).join("")
           : `<li class="muted">${empty}</li>`;
 
+      // Notable teammate pairings (roster construction).
+      const syn = SCORING.synergyNotes({ starters: m.starters, bench: [] });
+      const synHtml = syn.length
+        ? `<div class="res-subhead">Chemistry &amp; notable pairings</div>
+           <ul class="res-pairings">${syn.map((s) => `<li class="${s.kind}">${s.text}</li>`).join("")}</ul>`
+        : "";
+
       const maxWins = 73;
       const bars = ev.seasons
         .map((s, idx) => {
@@ -608,8 +615,8 @@
         <h4>${i === 0 ? "🏆 " : `#${i + 1} `}${m.isCpu ? "🤖 " : ""}${m.name}</h4>
         <div class="res-stats">
           <div class="res-stat"><b>${ev.avgRecord}</b>Avg season record</div>
-          <div class="res-stat"><b>${ev.peakWins}</b>Peak wins</div>
-          <div class="res-stat"><b>${ev.titlesExpected.toFixed(2)}</b>Expected titles (15 yr)</div>
+          <div class="res-stat"><b>${ev.bestRecord}</b>Best record at peak</div>
+          <div class="res-stat"><b>${ev.championships}</b>Total championships won</div>
           <div class="res-stat"><b>${playoffLabel(ev.avgPlayoffIndex)}</b>Typical postseason</div>
           <div class="res-stat"><b>${Math.round(ev.composite)}</b>Composite score</div>
         </div>
@@ -626,6 +633,7 @@
             </div>
           </div>
         </div>
+        ${synHtml}
         <div class="res-subhead">15-year win trajectory</div>
         <div class="timeline">${bars}</div>`;
       wrap.appendChild(team);

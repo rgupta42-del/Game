@@ -69,13 +69,21 @@ on-court fit with human factors:
 
 - **Spacing** — enough shooting; two non-spacing bigs is penalized.
 - **Playmaking** — needs a real engine.
-- **Defense** — blends perimeter & interior; rewards a rim protector and a stopper.
+- **Defense** — perimeter + interior plus event-creating `steals` and `blocks`;
+  rewards a rim protector and a perimeter stopper.
 - **Rebounding** — don't get killed on the glass.
 - **Shot hierarchy** — a clear go-to scorer matters, especially in the playoffs.
-- **Elevators** (`elevates`) — players who make teammates better lift the whole.
+- **Elevators** (`elevates`) and **passing/creation** — players who make
+  teammates better lift the whole.
 - **Usage / shot distribution** (`ballDominance` as a usage-rate proxy) — there's
   only one ball: you want one or two high-usage creators surrounded by off-ball
   shooters. Stacking three-plus ball-dominant scorers is a usage logjam.
+- **Pairwise synergy** — every pair of teammates is scored for how they make each
+  other better or worse. Two iso ball-dominant creators (Luka + Harden) step on
+  each other; two paint-bound bigs (Giannis + Embiid) clog the post on offense —
+  yet those same twin rim protectors *wall off the paint* on defense. Creators
+  paired with spacers, lob threats and shooters lift both ends.
+- **Clutch** — proven late-game shot-makers add playoff value.
 - **Culture & coachability** — a potential team cancer poisons the room; great
   culture and system-fit lift it.
 
@@ -85,8 +93,11 @@ options (weighted toward the best), so the same human pick never yields the same
 CPU draft twice.
 
 The **results page** shows each team's clean position-by-position starting five
-(with usage tier and rating) plus a short strengths-and-weaknesses summary and a
-15-year win trajectory.
+(with usage tier and rating), a strengths-and-weaknesses summary, the notable
+teammate pairings (good and bad), and a 15-year win trajectory. Headline stats
+include **Total Championships won** and **Best Record at Peak** — a clutch,
+playoff-built team can win more titles than its average record suggests, while a
+regular-season juggernaut may peak higher but close out fewer.
 
 The board's **Fit** number is "how much does this pick help *your* roster right
 now?" — your career rating plus bonuses for filling open needs, minus redundancy

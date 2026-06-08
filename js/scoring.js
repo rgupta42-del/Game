@@ -50,7 +50,16 @@ function peakOverall(player) {
   // "Can you be the #1 option?" — elite scoring/creation is the separator.
   const creation = r.scoring * 0.55 + r.playmaking * 0.25 + Math.max(r.shooting, r.scoring) * 0.20;
 
-  const val = base * 0.45 + top3 * 0.30 + creation * 0.25;
+  // Two-way credit: shutdown perimeter D, steals and rim-protecting blocks add
+  // a little value on top (a small, centered bonus so it doesn't distort scale).
+  const e = player.ext || {};
+  const defScore =
+    r.perimeterD * 0.3 + r.interiorD * 0.3 +
+    (e.steals != null ? e.steals : r.perimeterD) * 0.2 +
+    (e.blocks != null ? e.blocks : r.interiorD) * 0.2;
+  const defBonus = (defScore - 70) * 0.06;
+
+  const val = base * 0.45 + top3 * 0.30 + creation * 0.25 + defBonus;
   return Math.round(clamp(val, 0, 99));
 }
 
@@ -116,8 +125,11 @@ function careerRating(player) {
   const longevity = arcAvg * durability; // ~0.6 .. 1.0
 
   const c = player.career;
-  // Intangibles lean on teammate elevation (talent-adjacent); winning is a light touch.
-  const intangibleNudge = (c.elevates - 75) / 14 + (c.winning - 75) / 40;
+  const e = player.ext || {};
+  // Intangibles lean on teammate elevation (talent-adjacent); winning and clutch
+  // are light touches.
+  const intangibleNudge =
+    (c.elevates - 75) / 14 + (c.winning - 75) / 40 + ((e.clutch != null ? e.clutch : 70) - 75) / 40;
 
   const val = peak * 0.88 + peak * longevity * 0.12 + intangibleNudge;
   return clamp(Math.round(val), 0, 99);
@@ -190,6 +202,106 @@ function offensiveBalance(starters) {
   return clamp(score, 0, 100);
 }
 
+/** Safe accessor for the derived advanced attributes. */
+const ext = (p) => p.ext || {};
+
+/**
+ * Pairwise synergy between two teammates — the heart of roster-construction
+ * modeling. Returns { off, def, offReason, defReason } where off/def are point
+ * adjustments (positive = they make each other better, negative = worse).
+ *
+ * Offense: two ball-dominant iso creators step on each other (Luka + Harden);
+ * two paint-bound bigs clog the post/lane (Giannis + Embiid); a creator paired
+ * with a spacer, lob threat, or shooter lifts both. Defense: a rim protector
+ * plus a perimeter stopper covers all levels; twin shot-blockers wall the paint;
+ * two weak defenders can be hunted.
+ */
+function pairSynergy(a, b) {
+  const ra = a.ratings, rb = b.ratings;
+  const ca = a.career, cb = b.career;
+  const ea = ext(a), eb = ext(b);
+  let off = 0, def = 0, offReason = "", defReason = "";
+
+  // Rim-protection level combines shot-blocking and interior defense.
+  const aRim = Math.max(ea.blocks || 0, ra.interiorD);
+  const bRim = Math.max(eb.blocks || 0, rb.interiorD);
+
+  // --- OFFENSE ---
+  if (ca.ballDominance >= 80 && cb.ballDominance >= 80) {
+    off -= ((ca.ballDominance - 80) + (cb.ballDominance - 80)) * 0.18 + 3;
+    offReason = "both need the ball in iso to create";
+  }
+  if (ea.interiorLoad >= 72 && eb.interiorLoad >= 72) {
+    off -= ((ea.interiorLoad - 72) + (eb.interiorLoad - 72)) * 0.15 + 3;
+    offReason = "both operate out of the paint/post — clogged spacing";
+  }
+  const aIsCreator = ra.playmaking >= rb.playmaking;
+  const hiPlay = Math.max(ra.playmaking, rb.playmaking);
+  const spacerShoot = aIsCreator ? rb.shooting : ra.shooting;
+  const spacerLoad = aIsCreator ? eb.interiorLoad : ea.interiorLoad;
+  if (hiPlay >= 82 && spacerShoot >= 80) {
+    off += 4; if (!offReason) offReason = "creator paired with a floor-spacer";
+  }
+  if (hiPlay >= 84 && spacerLoad >= 72) {
+    off += 3; if (!offReason) offReason = "creator paired with a lob/roll finisher";
+  }
+  if ((ea.interiorLoad >= 72 && rb.shooting >= 80) || (eb.interiorLoad >= 72 && ra.shooting >= 80)) {
+    off += 3; if (!offReason) offReason = "shooting spaces the floor for a paint scorer";
+  }
+  if (ra.shooting < 55 && rb.shooting < 55) {
+    off -= 5; offReason = "neither spaces the floor";
+  }
+
+  // --- DEFENSE ---
+  if ((bRim >= 82 && ra.perimeterD >= 84) || (aRim >= 82 && rb.perimeterD >= 84)) {
+    def += 5; defReason = "rim protector + perimeter stopper covers all levels";
+  }
+  if (aRim >= 80 && bRim >= 80) {
+    def += 4; if (!defReason) defReason = "twin rim protectors wall off the paint";
+  }
+  if (ea.steals >= 72 && eb.steals >= 72) {
+    def += 3; if (!defReason) defReason = "both generate steals and ball pressure";
+  }
+  if (ra.perimeterD >= 84 && rb.perimeterD >= 84) {
+    def += 3; if (!defReason) defReason = "two switchable perimeter stoppers";
+  }
+  if (ra.perimeterD < 58 && rb.perimeterD < 58 && ea.blocks < 60 && eb.blocks < 60) {
+    def -= 6; defReason = "two weak defenders can be hunted";
+  }
+
+  return { off, def, offReason, defReason };
+}
+
+/** Sum pairwise synergy across a lineup; returns { off, def, pairs }. */
+function teamSynergy(starters) {
+  let off = 0, def = 0;
+  const pairs = [];
+  for (let i = 0; i < starters.length; i++) {
+    for (let j = i + 1; j < starters.length; j++) {
+      const s = pairSynergy(starters[i], starters[j]);
+      off += s.off;
+      def += s.def;
+      pairs.push({ a: starters[i], b: starters[j], ...s });
+    }
+  }
+  return { off, def, pairs };
+}
+
+/** Human-readable notes about the most notable teammate pairings. */
+function synergyNotes(roster) {
+  const starters = starterPlayers(roster);
+  const { pairs } = teamSynergy(starters);
+  const notes = [];
+  pairs.forEach((p) => {
+    if (p.off <= -6) notes.push({ mag: -p.off, kind: "bad", text: `🅾️ ${p.a.name} & ${p.b.name} clash on offense — ${p.offReason}.` });
+    else if (p.off >= 5) notes.push({ mag: p.off, kind: "good", text: `🅾️ ${p.a.name} & ${p.b.name} mesh on offense — ${p.offReason}.` });
+    if (p.def >= 4) notes.push({ mag: p.def, kind: "good", text: `🛡️ ${p.a.name} & ${p.b.name} — ${p.defReason}.` });
+    else if (p.def <= -5) notes.push({ mag: -p.def, kind: "bad", text: `🛡️ ${p.a.name} & ${p.b.name} — ${p.defReason}.` });
+  });
+  // Most impactful pairings first.
+  return notes.sort((a, b) => b.mag - a.mag).slice(0, 7);
+}
+
 // --------------------------------------------------------------------------
 //  Team fit / chemistry
 // --------------------------------------------------------------------------
@@ -224,9 +336,13 @@ function chemistryForLineup(starters) {
   const hasEngine = starters.some((p) => r(p).playmaking >= 82);
   let playmaking = avgPlaymaking + (hasEngine ? 10 : -12);
 
-  const hasRim = starters.some((p) => r(p).interiorD >= 82);
-  const hasStopper = starters.some((p) => r(p).perimeterD >= 84);
-  let defense = avgPerimD * 0.5 + avgInteriorD * 0.5 + (hasRim ? 7 : -10) + (hasStopper ? 6 : -6);
+  const avgSteals = avg((p) => ext(p).steals != null ? ext(p).steals : r(p).perimeterD);
+  const avgBlocks = avg((p) => ext(p).blocks != null ? ext(p).blocks : r(p).interiorD);
+  const hasRim = starters.some((p) => r(p).interiorD >= 82 || ext(p).blocks >= 82);
+  const hasStopper = starters.some((p) => r(p).perimeterD >= 84 || ext(p).steals >= 80);
+  let defense =
+    avgPerimD * 0.3 + avgInteriorD * 0.28 + avgSteals * 0.2 + avgBlocks * 0.22 +
+    (hasRim ? 7 : -10) + (hasStopper ? 6 : -6);
 
   let rebounding = avgReb + (avgReb < 60 ? -8 : 0);
 
@@ -245,11 +361,15 @@ function chemistryForLineup(starters) {
   // Usage / shot-distribution fit (the advanced-stats lens on chemistry).
   const offBalance = offensiveBalance(starters);
 
+  // Pairwise roster-construction synergy: how the specific players fit together.
+  const syn = teamSynergy(starters);
+  const synAdj = clamp(syn.off, -18, 14) * 0.5 + clamp(syn.def, -12, 18) * 0.5;
+
   // A team cancer poisons the room more than the averages suggest.
   const worstCulture = Math.min(...starters.map((p) => c(p).culture));
   const cancerPenalty = worstCulture < 45 ? (45 - worstCulture) * 0.4 : 0;
 
-  const chem = skillChem * 0.58 + humanChem * 0.27 + offBalance * 0.15 - cancerPenalty;
+  const chem = skillChem * 0.55 + humanChem * 0.25 + offBalance * 0.12 + 8 + synAdj - cancerPenalty;
   return clamp(chem, 0, 100);
 }
 
@@ -308,11 +428,18 @@ function projectSeason(roster, t) {
   const top3 = sortedVals.slice(0, 3);
   const top3Avg = top3.reduce((s, v) => s + v, 0) / Math.max(1, top3.length);
   const avgWinning = starters.reduce((s, p) => s + p.career.winning, 0) / filledSlots;
+  const avgClutch = starters.reduce((s, p) => s + (ext(p).clutch != null ? ext(p).clutch : 70), 0) / filledSlots;
 
+  // Playoffs reward star power, defense, fit, proven winners AND clutch — so a
+  // clutch, playoff-built team can win titles beyond what its record suggests.
   const playoffStrength =
-    best * 0.40 + top3Avg * 0.27 + chemistry * 0.17 + avgStarterValue * 0.10 + avgWinning * 0.06;
+    best * 0.38 + top3Avg * 0.25 + chemistry * 0.16 + avgStarterValue * 0.08 +
+    avgWinning * 0.06 + avgClutch * 0.07;
   const playoffIndex = clamp((playoffStrength - 45) * 1.6, 0, 100) * completeness;
-  const titleProb = clamp((playoffStrength - 78) / 38, 0, 1) ** 1.5 * completeness;
+
+  // Per-season championship probability (capped); summed over 15 years this lands
+  // a dynasty around 3-5 titles, a contender ~1-2, a pretender ~0.
+  const titleProb = clamp((playoffStrength - 72) / 22, 0, 1) ** 1.6 * 0.55 * completeness;
 
   return { wins, playoffIndex, titleProb, avgStarterValue, chemistry };
 }
@@ -336,15 +463,19 @@ function evaluateRoster(roster) {
 
   const avgWins = winsSum / PROJECTION_YEARS;
   const avgPlayoffIndex = playoffSum / PROJECTION_YEARS;
+  const pk = Math.round(peakWins);
+  const championships = Math.round(titlesExpected);
   const composite =
-    avgWins * 0.6 + avgPlayoffIndex * 0.5 + titlesExpected * 14 + peakWins * 0.25;
+    avgWins * 0.55 + avgPlayoffIndex * 0.5 + titlesExpected * 4.5 + peakWins * 0.25;
 
   return {
     avgWins,
     avgRecord: `${avgWins.toFixed(1)}-${(82 - avgWins).toFixed(1)}`,
-    peakWins: Math.round(peakWins),
+    peakWins: pk,
+    bestRecord: `${pk}-${82 - pk}`, // best single-season record at peak
     avgPlayoffIndex,
-    titlesExpected,
+    titlesExpected, // expected value (fractional)
+    championships, // rounded total titles over 15 years
     composite,
     seasons,
     breakdown: buildBreakdown(roster, avgPlayoffIndex, titlesExpected),
@@ -407,6 +538,17 @@ function buildBreakdown(roster, avgPlayoffIndex, titlesExpected) {
   const avgWinning = starters.reduce((s, p) => s + c(p).winning, 0) / Math.max(1, starters.length);
   if (avgWinning >= 85) notes.push("🏆 Proven winners — this group rises in the postseason.");
 
+  const avgClutch = starters.reduce((s, p) => s + (ext(p).clutch || 70), 0) / Math.max(1, starters.length);
+  if (avgClutch >= 85) notes.push("🧊 Ice in their veins — elite clutch shot-making for tight playoff games.");
+  else if (avgClutch <= 62) notes.push("😬 Questionable in the clutch — may shrink in close games.");
+
+  const avgSteals = starters.reduce((s, p) => s + (ext(p).steals || 40), 0) / Math.max(1, starters.length);
+  const avgBlocks = starters.reduce((s, p) => s + (ext(p).blocks || 40), 0) / Math.max(1, starters.length);
+  if ((avgSteals + avgBlocks) / 2 >= 68) notes.push("🦅 Disruptive, event-creating defense (steals + blocks).");
+
+  // Notable teammate pairings (roster construction).
+  synergyNotes(roster).forEach((s) => notes.push(s.text));
+
   notes.push(`🏆 Expected titles over 15 years: ${titlesExpected.toFixed(2)}.`);
   notes.push(`📅 Typical postseason result: ${playoffLabel(avgPlayoffIndex)}.`);
 
@@ -459,11 +601,23 @@ function pickFitGrade(roster, player, pos) {
     usageAdj += 4; // off-ball spacer next to your creators
   }
 
+  // Pairwise synergy with the players already on the roster: does this pick make
+  // the current group better or worse (and vice versa)?
+  let synFit = 0;
+  for (const mate of starters) {
+    const s = pairSynergy(player, mate);
+    synFit += s.off + s.def;
+  }
+  synFit = clamp(synFit, -14, 12) * 0.5;
+
+  // A little extra value for proven clutch closers.
+  const clutchFit = ((ext(player).clutch != null ? ext(player).clutch : 70) - 72) * 0.04;
+
   // Slight penalty for adding a locker-room risk to an existing group.
   const culturePenalty =
     starters.length > 0 && c(player).culture < 50 ? (50 - c(player).culture) * 0.12 : 0;
 
-  return clamp(career + need + usageAdj - culturePenalty, 0, 100);
+  return clamp(career + need + usageAdj + synFit + clutchFit - culturePenalty, 0, 100);
 }
 
 // --------------------------------------------------------------------------
@@ -547,10 +701,21 @@ function teamStrengthsWeaknesses(roster) {
   if (creators >= 1 && offBall >= 2) strengths.push("balanced usage / shot distribution");
   if (creators >= 3) weaknesses.push("usage logjam (too many ball-dominant scorers)");
 
-  // Defense overall.
-  const def = avg((p) => (r(p).perimeterD + r(p).interiorD) / 2);
-  if (def >= 78) strengths.push("elite two-way defense");
-  else if (def <= 60) weaknesses.push("leaky defense");
+  // Defense overall (incl. event-creating steals & blocks).
+  const def = avg((p) => (r(p).perimeterD + r(p).interiorD + (ext(p).steals || 40) + (ext(p).blocks || 40)) / 4);
+  if (def >= 74) strengths.push("elite, event-creating two-way defense");
+  else if (def <= 56) weaknesses.push("leaky defense");
+
+  // Clutch.
+  const clutch = avg((p) => ext(p).clutch || 70);
+  if (clutch >= 85) strengths.push("elite clutch shot-making");
+  else if (clutch <= 62) weaknesses.push("shaky in the clutch");
+
+  // Roster-construction synergy.
+  const syn = teamSynergy(s);
+  if (syn.off <= -8) weaknesses.push("clashing offensive fits (overlapping creators/paint scorers)");
+  else if (syn.off >= 8) strengths.push("complementary offensive fits");
+  if (syn.def >= 10) strengths.push("layered, complementary defense");
 
   // Durability / aging / intangibles.
   const avgInjury = avg((p) => p.injuryRisk);
@@ -603,6 +768,9 @@ const SCORING = {
   teamStrengthsWeaknesses,
   usageTier,
   offensiveBalance,
+  pairSynergy,
+  teamSynergy,
+  synergyNotes,
   rosterPlayers,
   starterPlayers,
   // Back-compat alias: the UI's "overall" badge now shows the career rating.

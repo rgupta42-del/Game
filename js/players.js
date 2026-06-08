@@ -311,6 +311,101 @@ const PLAYER_POOL = [
     archetype: "Stretch-five unicorn" },
 ];
 
+// ----------------------------------------------------------------------------
+//  Derived advanced attributes: clutch, steals, blocks, interiorLoad
+//
+//  These power the steals/blocks/shutdown-defense, clutch, and roster-construction
+//  (paint-clog / usage) modeling. Most are derived from the core profile; the
+//  OVERRIDES table pins values for players whose real-life profile the
+//  derivation can't capture (elite ball-hawks, shot-blockers, clutch closers,
+//  paint-bound bigs).
+// ----------------------------------------------------------------------------
+(function augmentPlayers() {
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+  const OVERRIDES = {
+    // --- defense: steals / blocks / shutdown + paint load ---
+    ddaniels: { steals: 99, blocks: 32 },
+    amen: { steals: 88, blocks: 55 },
+    anunoby: { steals: 72, blocks: 52 },
+    mbridges: { steals: 72, blocks: 46 },
+    kawhi: { steals: 82, blocks: 46, clutch: 92 },
+    dwhite: { steals: 70, blocks: 64, clutch: 80 },
+    bam: { steals: 68, blocks: 72, interiorLoad: 60 },
+    draymond: { steals: 72, blocks: 72, interiorLoad: 50 },
+    giannis: { steals: 70, blocks: 78, interiorLoad: 92, clutch: 84 },
+    gobert: { steals: 38, blocks: 98, interiorLoad: 88, clutch: 50 },
+    wemby: { steals: 60, blocks: 99, interiorLoad: 58, clutch: 80 },
+    mobley: { steals: 50, blocks: 92, interiorLoad: 70 },
+    chet: { steals: 46, blocks: 94, interiorLoad: 52 },
+    jjj: { steals: 55, blocks: 94, interiorLoad: 56 },
+    turner: { steals: 38, blocks: 90, interiorLoad: 44 },
+    kessler: { steals: 30, blocks: 95, interiorLoad: 88, clutch: 52 },
+    jallen: { steals: 35, blocks: 82, interiorLoad: 85, clutch: 58 },
+    embiid: { steals: 45, blocks: 88, interiorLoad: 82, clutch: 78 },
+    adavis: { steals: 55, blocks: 92, interiorLoad: 76, clutch: 80 },
+    agordon: { steals: 52, blocks: 60, interiorLoad: 60 },
+    sabonis: { steals: 45, blocks: 44, interiorLoad: 86, clutch: 60 },
+    sengun: { steals: 48, blocks: 50, interiorLoad: 82 },
+    jokic: { steals: 60, blocks: 55, interiorLoad: 66, clutch: 90 },
+    kat: { steals: 40, blocks: 58, interiorLoad: 55 },
+    markkanen: { interiorLoad: 40 },
+    paolo: { interiorLoad: 64, clutch: 78 },
+    jjohnson: { interiorLoad: 60, steals: 58 },
+    siakam: { interiorLoad: 58, steals: 55 },
+    // --- clutch closers (and notable non-clutch) ---
+    dlillard: { clutch: 97 },
+    kyrie: { clutch: 95 },
+    curry: { clutch: 93, steals: 60 },
+    lebron: { clutch: 90, steals: 60, blocks: 55 },
+    durant: { clutch: 92, blocks: 60 },
+    sga: { clutch: 90, steals: 78 },
+    tatum: { clutch: 85, steals: 55 },
+    butler: { clutch: 92, steals: 78 },
+    jbrown: { clutch: 84, steals: 60 },
+    brunson: { clutch: 90 },
+    booker: { clutch: 88 },
+    mitchell: { clutch: 84 },
+    edwards: { clutch: 86, steals: 60 },
+    murray: { clutch: 92 },
+    derozan: { clutch: 86 },
+    trae: { clutch: 82 },
+    halliburton: { clutch: 84, steals: 62 },
+    reaves: { clutch: 80 },
+    maxey: { clutch: 80, steals: 55 },
+    herro: { clutch: 78 },
+    klay: { clutch: 88, steals: 55 },
+    cp3: { clutch: 80, steals: 82 },
+    harden: { clutch: 52, steals: 60 },
+    westbrook: { clutch: 50, steals: 72 },
+    bane: { clutch: 78 },
+    pgeorge: { steals: 70, clutch: 76 },
+    fwagner: { steals: 58, clutch: 76 },
+    jwilliams: { steals: 62, clutch: 78 },
+    lavine: { clutch: 60 },
+  };
+
+  PLAYER_POOL.forEach((p) => {
+    const r = p.ratings;
+    const c = p.career;
+    const guard = p.pos === "PG" || p.pos === "SG";
+    const big = p.pos === "C" || p.pos === "PF";
+    const derived = {
+      // blocks track rim protection; guards rarely block shots
+      blocks: clamp(Math.round(r.interiorD - (guard ? 20 : 0) + (r.athleticism - 75) * 0.2), 5, 99),
+      // steals track perimeter disruption (hands, anticipation, athleticism)
+      steals: clamp(Math.round(r.perimeterD * 0.5 + r.athleticism * 0.15 + r.iq * 0.12 - 6), 8, 90),
+      // clutch leans on winning pedigree + shot-making + feel
+      clutch: clamp(Math.round(c.winning * 0.45 + r.scoring * 0.3 + r.iq * 0.1 + 6), 25, 97),
+      // interiorLoad = how much offense comes from the paint/post (overlap risk)
+      interiorLoad: big
+        ? clamp(Math.round(r.interiorD * 0.32 + r.rebounding * 0.3 + (100 - r.shooting) * 0.26 - 14), 8, 95)
+        : clamp(Math.round(r.scoring * 0.12 + (100 - r.shooting) * 0.1), 5, 45),
+    };
+    p.ext = Object.assign(derived, OVERRIDES[p.id] || {});
+  });
+})();
+
 // Make available both as a module export and on the global scope (browser).
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { PLAYER_POOL };
