@@ -130,7 +130,10 @@
         </p>
         <div id="results-podium" class="podium"></div>
         <div id="results-detail" class="results-detail"></div>
-        <button id="play-again" class="btn primary big">New Draft</button>
+        <div class="results-actions">
+          <button id="share-results" class="btn primary big">📋 Copy results link to share</button>
+          <button id="play-again" class="btn big">New Draft</button>
+        </div>
       </div>
     </section>
 
@@ -145,6 +148,21 @@
       <button id="slot-cancel" class="btn ghost">Cancel</button>
     </div>
   </div>
+
+  <!-- Seat-claim modal (live online drafts) -->
+  <div id="seat-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Which seat are you?</h3>
+      <p class="muted">Pick the manager you're playing as in this live draft.</p>
+      <div id="seat-options" class="slot-options"></div>
+    </div>
+  </div>
+
+  <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-sync.js"></script>
 
   <script src="js/players.js"></script>
   <script src="js/scoring.js"></script>

@@ -34,6 +34,21 @@ No install, no backend, no internet required. Just open the page.
    forward at SF or PF, etc.). No bench. Every team's roster is visible to
    everyone throughout the draft.
 6. When all fives are full, the **15-year projection** runs and ranks every team.
+   Hit **📋 Copy results link to share** to send anyone a self-contained link that
+   shows those exact results (no setup needed to view).
+
+### Live online drafts (real-time)
+
+Online mode supports **real-time sync** so each manager drafts from their own
+device and picks appear instantly for everyone — no link-passing. This uses
+**Firebase Realtime Database** and is **opt-in**: until a config is provided,
+online mode automatically falls back to the zero-setup shareable-link relay.
+
+To enable it (free, ~2 minutes), follow the step-by-step instructions at the top
+of [`js/firebase-config.js`](js/firebase-config.js) and paste your Firebase web
+config there. Once set, "Online" mode creates a **room link** — share it once,
+each manager joins and claims their seat, and the draft syncs live. If Firebase
+isn't configured (or can't load), everything still works via the link relay.
 
 ## The rules, encoded
 

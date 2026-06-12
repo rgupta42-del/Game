@@ -34,6 +34,10 @@
     sortBy: "career",
     mode: "local", // "local" | "online"
     online: false,
+    live: false, // true when using Firebase real-time sync
+    roomId: null,
+    mySeat: null, // which manager index this device controls (live mode)
+    staticBuilt: false,
     gameGen: 0, // generation counter so stale CPU timers can't fire into a new game
     pendingPlayer: null, // player awaiting slot assignment in the modal
   };
@@ -108,6 +112,117 @@
     }
   }
 
+  // ---- Live sync (Firebase Realtime Database) ----------------------------
+  const liveAvailable = () => !!(window.FBSync && window.FBSync.available());
+  const randomRoomId = () =>
+    Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
+  const seatKey = (roomId) => "nbaredraft_seat_" + roomId;
+
+  function rebuildGameFrom(names, picks) {
+    game = new DraftGame(names, { benchSize: 0 });
+    (picks || []).forEach((pk) => {
+      // pk may be an array [id, slot] or a Firebase object {0:id, 1:slot}.
+      const p = PLAYER_POOL.find((x) => x.id === pk[0]);
+      if (!p || game.isComplete) return;
+      try {
+        game.draft(p, pk[1]);
+      } catch (e) {
+        /* skip a malformed/duplicate pick rather than break the whole replay */
+      }
+    });
+  }
+
+  /** Host: create a live room, claim seat 0, start watching. */
+  function startLiveDraft(names) {
+    ui.online = true;
+    ui.live = true;
+    ui.roomId = randomRoomId();
+    ui.mySeat = 0; // the host plays the first manager
+    ui.gameGen++;
+    localStorage.setItem(seatKey(ui.roomId), "0");
+    rebuildGameFrom(names, []);
+    buildDraftStaticUI();
+    ui.staticBuilt = true;
+    showScreen("#draft-screen");
+    renderDraft();
+    FBSync.create(ui.roomId, { names, picks: [], seats: { 0: names[0] || "Manager 1" } })
+      .then(() => {
+        history.replaceState(null, "", "#room=" + ui.roomId);
+        FBSync.watch(ui.roomId, onRoomUpdate);
+      })
+      .catch((e) => {
+        // Couldn't reach Firebase — degrade to the link-relay so the draft still works.
+        console.error(e);
+        ui.live = false;
+        pushOnlineState();
+        renderDraft();
+      });
+  }
+
+  /** Joiner: open an existing live room and start watching. */
+  function joinLiveRoom(roomId) {
+    ui.online = true;
+    ui.live = true;
+    ui.roomId = roomId;
+    const saved = localStorage.getItem(seatKey(roomId));
+    ui.mySeat = saved != null ? parseInt(saved, 10) : null;
+    ui.gameGen++;
+    FBSync.watch(roomId, onRoomUpdate);
+  }
+
+  /** Authoritative state changed in the room — rebuild and re-render for everyone. */
+  function onRoomUpdate(data) {
+    if (!data) return;
+    const names = data.names || [];
+    let picks = data.picks || [];
+    if (!Array.isArray(picks)) picks = Object.values(picks); // Firebase array quirk
+    ui.gameGen++; // invalidate any pending timers
+    rebuildGameFrom(names, picks);
+
+    if (!ui.staticBuilt) {
+      buildDraftStaticUI();
+      ui.staticBuilt = true;
+    }
+    // First-time joiner picks which seat they are.
+    if (ui.mySeat == null && names.length) {
+      showSeatModal(names, data.seats || {});
+    }
+    if (game.isComplete) {
+      showResults();
+    } else {
+      showScreen("#draft-screen");
+      renderDraft();
+    }
+  }
+
+  function showSeatModal(names, takenSeats) {
+    const wrap = $("#seat-options");
+    wrap.innerHTML = "";
+    const takenIdx = new Set(Object.keys(takenSeats || {}).map((k) => parseInt(k, 10)));
+    names.forEach((nm, i) => {
+      const taken = takenIdx.has(i) && String(i) !== localStorage.getItem(seatKey(ui.roomId));
+      const o = el("div", "so", `${nm}${taken ? " (taken)" : ""}`);
+      if (taken) o.style.opacity = "0.5";
+      else
+        o.onclick = () => {
+          ui.mySeat = i;
+          localStorage.setItem(seatKey(ui.roomId), String(i));
+          FBSync.claimSeat(ui.roomId, i, nm);
+          $("#seat-modal").classList.add("hidden");
+          renderDraft();
+        };
+      wrap.appendChild(o);
+    });
+    $("#seat-modal").classList.remove("hidden");
+  }
+
+  /** Is it this device's turn to draft? (Always yes outside live mode.) */
+  function myTurn() {
+    if (!ui.live) return true;
+    const m = game.currentManager();
+    return m && m.id === ui.mySeat;
+  }
+
   function renderManagerNameInputs() {
     const n = parseInt($("#num-managers").value, 10);
     const wrap = $("#manager-names");
@@ -157,11 +272,18 @@
           const cb = r.querySelector('input[type="checkbox"]');
           return cb ? cb.checked : false;
         });
+    // Live online draft via Firebase when configured; otherwise link-relay.
+    if (online && liveAvailable()) {
+      startLiveDraft(names);
+      return;
+    }
+
     ui.online = online;
     ui.gameGen++;
     game = new DraftGame(names, { benchSize: 0, cpuFlags });
     initCpuProfiles();
     buildDraftStaticUI();
+    ui.staticBuilt = true;
     showScreen("#draft-screen");
     if (online) pushOnlineState();
     renderDraft();
@@ -279,7 +401,7 @@
     scheduleCpuPick();
   }
 
-  /** The online relay banner: whose turn it is + a copy-link button. */
+  /** The online banner: live room status (your turn / waiting) or relay link. */
   function renderSharePanel() {
     const panel = $("#share-panel");
     if (!ui.online) {
@@ -288,9 +410,26 @@
     }
     panel.classList.remove("hidden");
     const m = game.currentManager();
-    panel.querySelector(".share-turn").innerHTML = `🔗 It's <b>${m.name}</b>'s turn`;
-    panel.querySelector(".share-instr").textContent =
-      `${m.name}: make your pick below, then copy this link and send it to the next manager so they can take their turn.`;
+    const turnEl = panel.querySelector(".share-turn");
+    const instrEl = panel.querySelector(".share-instr");
+    const copyBtn = $("#copy-link");
+
+    if (ui.live) {
+      // Real-time room: share the link once, then everyone drafts on their turn.
+      copyBtn.textContent = "🔗 Copy room link";
+      const mine = myTurn();
+      const youAre = ui.mySeat != null ? ` — you're ${game.managers[ui.mySeat].name}` : "";
+      turnEl.innerHTML = mine
+        ? `🟢 <b>Your turn</b> — make your pick below${youAre}`
+        : `⏳ Waiting for <b>${m.name}</b> to pick${youAre}`;
+      instrEl.textContent =
+        "Live room — picks sync in real time. Share this link once so each manager can join on their own device.";
+    } else {
+      copyBtn.textContent = "🔗 Copy link to send";
+      turnEl.innerHTML = `🔗 It's <b>${m.name}</b>'s turn`;
+      instrEl.textContent =
+        `${m.name}: make your pick below, then copy this link and send it to the next manager so they can take their turn.`;
+    }
   }
 
   // ---- CPU autodraft -----------------------------------------------------
@@ -419,6 +558,7 @@
   function renderPlayerList() {
     const m = game.currentManager();
     const cpuOnClock = m.isCpu;
+    const locked = ui.live && !myTurn(); // in a live room, only the on-clock seat drafts
     const list = $("#player-list");
     list.innerHTML = "";
     const players = visiblePlayers();
@@ -431,7 +571,7 @@
     const frag = document.createDocumentFragment();
     players.forEach((p) => {
       const ovr = careerRating(p);
-      const canDraft = !cpuOnClock && game.canDraft(m, p);
+      const canDraft = !cpuOnClock && !locked && game.canDraft(m, p);
       const fit = Math.round(bestFit(m, p));
 
       const row = el("div", "player-row" + (canDraft ? "" : " disabled"));
@@ -459,6 +599,8 @@
         actions.appendChild(btn);
       } else if (cpuOnClock) {
         actions.appendChild(el("span", "slot-sub", "🤖 CPU"));
+      } else if (locked) {
+        actions.appendChild(el("span", "slot-sub", "⏳ waiting"));
       } else {
         actions.appendChild(el("span", "slot-sub", "No legal slot"));
       }
@@ -514,7 +656,14 @@
 
   function commitPick(player, slot) {
     game.draft(player, slot);
-    pushOnlineState(); // keep the shareable link in sync with every pick
+    if (ui.live) {
+      // Broadcast the new pick list; the room watch echoes it back to everyone
+      // (including us) as the single source of truth. Optimistic local render.
+      const picks = game.pickLog.map((e) => [e.player.id, e.slot]);
+      FBSync.writePicks(ui.roomId, picks);
+    } else {
+      pushOnlineState(); // keep the shareable link in sync with every pick
+    }
     renderDraft();
   }
 
@@ -664,6 +813,23 @@
     renderPodium(results);
     renderResultsDetail(results);
     showScreen("#results-screen");
+
+    $("#share-results").onclick = () => {
+      // A self-contained link (full draft encoded in the hash) that shows these
+      // exact results to anyone who opens it — no room/Firebase needed to view.
+      const url = location.origin + location.pathname + "#g=" + encodeGameState();
+      const btn = $("#share-results");
+      const done = () => {
+        btn.textContent = "✅ Results link copied!";
+        setTimeout(() => (btn.textContent = "📋 Copy results link to share"), 2500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, () => prompt("Copy this results link:", url));
+      } else {
+        prompt("Copy this results link:", url);
+      }
+    };
+
     $("#play-again").onclick = () => {
       // Clear any shared-link state so a new draft starts fresh.
       history.replaceState(null, "", location.pathname + location.search);
@@ -762,10 +928,25 @@
   // ---- Boot --------------------------------------------------------------
   function boot() {
     initSetup();
-    // If opened via a shared online-draft link, jump straight into the draft.
+    // Live room link → join the real-time room.
+    const room = location.hash.match(/[#&]room=([^&]+)/);
+    if (room) {
+      if (liveAvailable()) {
+        joinLiveRoom(room[1]);
+      } else {
+        // Firebase not configured on this deployment — explain rather than hang.
+        alert(
+          "This is a live draft link, but live sync isn't configured on this site yet.\n\n" +
+          "Add a Firebase config (see js/firebase-config.js) to enable real-time rooms."
+        );
+      }
+      return;
+    }
+    // Self-contained shared/results link → reconstruct from the hash.
     if (loadFromHash()) {
       ui.gameGen++;
       buildDraftStaticUI();
+      ui.staticBuilt = true;
       if (game.isComplete) {
         showResults();
       } else {
