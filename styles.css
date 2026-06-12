@@ -33,11 +33,13 @@ body {
   position: sticky;
   top: 0;
   z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
 }
-.brand { display: flex; align-items: center; gap: 14px; }
+.brand { display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit; }
 .ball { font-size: 38px; }
 .brand h1 { margin: 0; font-size: 24px; letter-spacing: 0.5px; }
 .tagline { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.home-btn { flex-shrink: 0; white-space: nowrap; }
 
 /* ---------------- Layout / screens ---------------- */
 main { max-width: 1280px; margin: 0 auto; padding: 24px; }

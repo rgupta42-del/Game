@@ -65,6 +65,18 @@
     numSel.addEventListener("change", renderManagerNameInputs);
     $("#start-draft").addEventListener("click", startDraft);
 
+    const goHome = (e) => {
+      if (e) e.preventDefault();
+      // Confirm before discarding a draft that's actually in progress.
+      const inDraft = game && !game.isComplete && $("#draft-screen").classList.contains("active");
+      if (inDraft && !confirm("Leave the current draft and start over from scratch?")) return;
+      // Clear any shared/room link state and reload to a fresh setup screen.
+      history.replaceState(null, "", location.pathname + location.search);
+      location.reload();
+    };
+    $("#home-btn").addEventListener("click", goHome);
+    $("#home-link").addEventListener("click", goHome);
+
     $("#mode-select").addEventListener("change", (e) => {
       ui.mode = e.target.value;
       $("#mode-hint").textContent =
