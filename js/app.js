@@ -579,9 +579,7 @@
 
       const row = el("div", "player-row" + (canDraft ? "" : " disabled"));
 
-      const badge = el("div", "ovr-badge", String(ovr));
-      badge.title = "Career rating";
-      badge.style.borderColor = ovrColor(ovr);
+      const photo = playerPhoto(p, ovr);
 
       const meta = el("div", "player-meta");
       meta.innerHTML = `
@@ -608,12 +606,32 @@
         actions.appendChild(el("span", "slot-sub", "No legal slot"));
       }
 
-      row.appendChild(badge);
+      row.appendChild(photo);
       row.appendChild(meta);
       row.appendChild(actions);
       frag.appendChild(row);
     });
     list.appendChild(frag);
+  }
+
+  /** NBA-Jam-style head sprite: headshot (with retro filter via CSS) + the
+   *  career rating overlaid, falling back to an initials avatar on any miss. */
+  function playerPhoto(p, ovr) {
+    const wrap = el("div", "player-photo noimg");
+    wrap.innerHTML =
+      `<span class="ph-initials">${p.initials || "?"}</span>` +
+      `<span class="ph-ovr" style="color:${ovrColor(ovr)}">${ovr}</span>`;
+    if (p.photo) {
+      const img = document.createElement("img");
+      img.src = p.photo;
+      img.alt = p.name;
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.onload = () => wrap.classList.remove("noimg");
+      img.onerror = () => img.remove(); // keep the initials avatar
+      wrap.insertBefore(img, wrap.firstChild);
+    }
+    return wrap;
   }
 
   function ovrColor(ovr) {

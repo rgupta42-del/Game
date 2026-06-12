@@ -179,13 +179,40 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .player-list { display: flex; flex-direction: column; gap: 8px; max-height: 62vh; overflow-y: auto; padding-right: 6px; }
 
 .player-row {
-  display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center;
+  display: grid; grid-template-columns: 54px 1fr auto; gap: 12px; align-items: center;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
 }
 .player-row.disabled { opacity: 0.4; }
 .ovr-badge {
   width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center;
   font-weight: 800; font-size: 17px; background: #11141a; border: 1px solid var(--line);
+}
+
+/* NBA-Jam-style head sprite */
+.player-photo {
+  position: relative; width: 54px; height: 54px; border-radius: 10px; overflow: hidden;
+  background: radial-gradient(circle at 50% 35%, #243049, #0d1320);
+  border: 2px solid var(--accent); box-shadow: 0 0 9px rgba(255,107,53,0.4); flex-shrink: 0;
+}
+.player-photo img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center;
+  filter: saturate(1.4) contrast(1.14) brightness(1.03); image-rendering: auto;
+}
+.player-photo .ph-initials {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-weight: 900; font-size: 18px; color: var(--accent); letter-spacing: 0.5px;
+}
+.player-photo:not(.noimg) .ph-initials { display: none; }
+/* CRT/arcade scanlines for the NBA Jam vibe */
+.player-photo::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0 1px, transparent 1px 3px);
+  mix-blend-mode: overlay;
+}
+.ph-ovr {
+  position: absolute; right: -1px; bottom: -1px; z-index: 2;
+  background: #0b0e13; border-top-left-radius: 7px; padding: 0 5px;
+  font-weight: 900; font-size: 13px; line-height: 18px; border: 1px solid var(--line); border-right: none; border-bottom: none;
 }
 .player-meta .pname { font-weight: 700; font-size: 15px; }
 .player-meta .psub { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
@@ -300,6 +327,8 @@ select:focus, input:focus { border-color: var(--accent-2); }
   .player-list { max-height: none; }
   #all-rosters { max-height: none; }
   .db-col { flex-basis: 132px; min-width: 132px; }
-  .player-row { grid-template-columns: 40px 1fr auto; gap: 10px; }
+  .player-row { grid-template-columns: 48px 1fr auto; gap: 10px; }
   .ovr-badge { width: 40px; height: 40px; font-size: 15px; }
+  .player-photo { width: 48px; height: 48px; }
+  .player-photo .ph-initials { font-size: 16px; }
 }

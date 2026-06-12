@@ -448,6 +448,33 @@ const PLAYER_POOL = [
     };
     p.ext = Object.assign(derived, OVERRIDES[p.id] || {}, EFFTOV[p.id] || {});
   });
+
+  // Official NBA headshots (public CDN). Players without an id fall back to an
+  // initials avatar in the UI, so a wrong/missing id never shows a broken image.
+  const NBA_IDS = {
+    sga: 1628983, luka: 1629029, curry: 201939, halliburton: 1630169, brunson: 1628973,
+    cade: 1630595, lamelo: 1630163, maxey: 1630178, fox: 1628368, trae: 1629027,
+    garland: 1629636, murray: 1627750, dlillard: 203081, ddaniels: 1641725, cp3: 101108,
+    westbrook: 201566, kyrie: 202681,
+    edwards: 1630162, booker: 1626164, mitchell: 1628378, jbrown: 1627759, klay: 202691,
+    harden: 201935, bane: 1630217, reaves: 1630559, dwhite: 1628401, lavine: 203897,
+    herro: 1629639, mcollum: 203468,
+    tatum: 1628369, durant: 201142, lebron: 2544, kawhi: 202695, butler: 202710,
+    pgeorge: 202331, fwagner: 1630532, anunoby: 1628384, mbridges: 1628969, bingram: 1627742,
+    derozan: 201942, bmiller: 1641706, amen: 1641708, jwilliams: 1631114,
+    giannis: 203507, paolo: 1631094, scottie: 1630567, siakam: 1627783, markkanen: 1628374,
+    jjj: 1628991, jjohnson: 1630552, agordon: 203932, draymond: 203110, adavis: 203076,
+    jokic: 203999, embiid: 203954, wemby: 1641705, bam: 1628389, kat: 1626157,
+    sabonis: 1627734, chet: 1631096, mobley: 1630596, sengun: 1630578, gobert: 203497,
+    turner: 1626167, jallen: 1628386, kessler: 1631117, kporzingis: 204001,
+  };
+  PLAYER_POOL.forEach((p) => {
+    if (NBA_IDS[p.id]) {
+      p.photo = "https://cdn.nba.com/headshots/nba/latest/260x190/" + NBA_IDS[p.id] + ".png";
+    }
+    // Initials shown when there's no photo (or it fails to load).
+    p.initials = p.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+  });
 })();
 
 // Make available both as a module export and on the global scope (browser).
