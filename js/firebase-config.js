@@ -19,9 +19,11 @@
  * Database security rules, not by hiding the key.
  */
 window.FIREBASE_CONFIG = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://PASTE_YOUR_PROJECT-default-rtdb.firebaseio.com",
-  projectId: "PASTE_YOUR_PROJECT",
-  appId: "PASTE_YOUR_APP_ID",
+  apiKey: "AIzaSyD2-9ZmWgAAYjCRISRZMTDXrGsBEG-pvYg",
+  authDomain: "nba-redraft-b85ce.firebaseapp.com",
+  databaseURL: "https://nba-redraft-b85ce-default-rtdb.firebaseio.com",
+  projectId: "nba-redraft-b85ce",
+  storageBucket: "nba-redraft-b85ce.firebasestorage.app",
+  messagingSenderId: "1089501925343",
+  appId: "1:1089501925343:web:8f1d89ed675183d0437e6a",
 };
