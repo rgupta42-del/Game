@@ -231,7 +231,10 @@
     const prevCpu = {};
     wrap.querySelectorAll(".mn-row").forEach((row, i) => {
       prevName[i] = row.querySelector('input[type="text"]').value;
-      prevCpu[i] = row.querySelector('input[type="checkbox"]').checked;
+      // The CPU checkbox isn't rendered in online mode — guard against null so
+      // changing the manager count doesn't throw and abort the rebuild.
+      const cb = row.querySelector('input[type="checkbox"]');
+      prevCpu[i] = cb ? cb.checked : false;
     });
     wrap.innerHTML = "";
     for (let i = 0; i < n; i++) {
