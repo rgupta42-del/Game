@@ -44,8 +44,9 @@ device and picks appear instantly for everyone — no link-passing. This uses
 **Firebase Realtime Database** and is **opt-in**: until a config is provided,
 online mode automatically falls back to the zero-setup shareable-link relay.
 
-To enable it (free, ~2 minutes), follow the step-by-step instructions at the top
-of [`js/firebase-config.js`](js/firebase-config.js) and paste your Firebase web
+To enable it (free, ~5 minutes), follow the **beginner's guide** in
+[`FIREBASE_SETUP.md`](FIREBASE_SETUP.md) (or the short version at the top of
+[`js/firebase-config.js`](js/firebase-config.js)) and paste your Firebase web
 config there. Once set, "Online" mode creates a **room link** — share it once,
 each manager joins and claims their seat, and the draft syncs live. If Firebase
 isn't configured (or can't load), everything still works via the link relay.
