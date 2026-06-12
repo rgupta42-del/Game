@@ -35,6 +35,15 @@
         </p>
 
         <div class="field">
+          <label for="mode-select">Mode</label>
+          <select id="mode-select">
+            <option value="local">Local — pass &amp; play / vs CPU (one device)</option>
+            <option value="online">Online — each manager on their own device (share a link)</option>
+          </select>
+          <span class="hint" id="mode-hint">Everyone drafts on this device, taking turns. Tick 🤖 for CPU seats.</span>
+        </div>
+
+        <div class="field">
           <label for="num-managers">Number of managers</label>
           <select id="num-managers"></select>
         </div>
@@ -60,6 +69,15 @@
           <div id="upcoming-list" class="upcoming-list"></div>
         </div>
         <div id="must-fill-banner" class="must-fill hidden"></div>
+      </div>
+
+      <!-- Online (share-a-link) relay panel -->
+      <div id="share-panel" class="share-panel hidden">
+        <div class="share-text">
+          <span class="share-turn"></span>
+          <span class="share-instr"></span>
+        </div>
+        <button id="copy-link" class="btn primary">🔗 Copy link to send</button>
       </div>
 
       <!-- Draft board: every pick, in order, by team (visible the whole draft) -->

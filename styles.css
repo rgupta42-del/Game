@@ -115,6 +115,25 @@ select:focus, input:focus { border-color: var(--accent-2); }
   color: var(--warn); padding: 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 600;
 }
 
+/* ---------------- Online share panel ---------------- */
+.share-panel {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  background: linear-gradient(135deg, rgba(74,163,255,0.14), rgba(61,220,132,0.10));
+  border: 1px solid var(--accent-2); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px;
+}
+.share-text { display: flex; flex-direction: column; gap: 4px; }
+.share-turn { font-size: 17px; font-weight: 800; }
+.share-instr { font-size: 13px; color: var(--muted); max-width: 640px; }
+
+/* ---------------- Tier badge ---------------- */
+.tier { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 6px; font-size: 11px; font-weight: 800; }
+.tier-1 { background: linear-gradient(135deg, #ffd54a, #ff9e2c); color: #1a1206; }
+.tier-2 { background: #b06bff; color: #15071f; }
+.tier-3 { background: var(--accent-2); color: #06121f; }
+.tier-4 { background: #2f6f4a; color: #d7ffe8; }
+.tier-5 { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.tier-6 { background: #11141a; color: #6b7280; border: 1px solid var(--line); }
+
 /* ---------------- Draft board (picks in order, by team) ---------------- */
 .draftboard { margin-bottom: 16px; padding: 16px; }
 .section-title { margin: 0 0 12px; font-size: 16px; }

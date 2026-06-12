@@ -7,7 +7,11 @@
 (function () {
   "use strict";
 
-  const { careerRating, peakOverall, pickFitGrade, evaluateRoster, playoffLabel } = SCORING;
+  const { careerRating, peakOverall, pickFitGrade, evaluateRoster, playoffLabel, playerTier } = SCORING;
+  const tierBadge = (p) => {
+    const t = playerTier(p);
+    return `<span class="tier tier-${t.n}" title="Tier ${t.n} — ${t.label}">${t.short}</span>`;
+  };
 
   // ---- DOM helpers -------------------------------------------------------
   const $ = (sel) => document.querySelector(sel);
@@ -28,6 +32,9 @@
     posFilter: "ALL",
     search: "",
     sortBy: "career",
+    mode: "local", // "local" | "online"
+    online: false,
+    gameGen: 0, // generation counter so stale CPU timers can't fire into a new game
     pendingPlayer: null, // player awaiting slot assignment in the modal
   };
 
@@ -53,6 +60,52 @@
     renderManagerNameInputs();
     numSel.addEventListener("change", renderManagerNameInputs);
     $("#start-draft").addEventListener("click", startDraft);
+
+    $("#mode-select").addEventListener("change", (e) => {
+      ui.mode = e.target.value;
+      $("#mode-hint").textContent =
+        ui.mode === "online"
+          ? "Each manager opens the link on their own device, makes their pick, then sends the updated link to the next manager. No CPUs."
+          : "Everyone drafts on this device, taking turns. Tick 🤖 for CPU seats.";
+      $("#start-draft").textContent = ui.mode === "online" ? "Start Online Draft" : "Start Draft";
+      renderManagerNameInputs();
+    });
+  }
+
+  // ---- Online state (share-a-link relay) ---------------------------------
+  const b64urlEncode = (s) =>
+    btoa(unescape(encodeURIComponent(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const b64urlDecode = (s) =>
+    decodeURIComponent(escape(atob(s.replace(/-/g, "+").replace(/_/g, "/"))));
+
+  function encodeGameState() {
+    const state = { n: game.managers.map((m) => m.name), p: game.pickLog.map((e) => [e.player.id, e.slot]) };
+    return b64urlEncode(JSON.stringify(state));
+  }
+
+  /** Persist the current online game into the URL (no history spam). */
+  function pushOnlineState() {
+    if (!ui.online) return;
+    history.replaceState(null, "", "#g=" + encodeGameState());
+  }
+
+  /** Rebuild a game from a URL hash, replaying every pick. Returns true if loaded. */
+  function loadFromHash() {
+    const m = location.hash.match(/[#&]g=([^&]+)/);
+    if (!m) return false;
+    try {
+      const state = JSON.parse(b64urlDecode(m[1]));
+      game = new DraftGame(state.n, { benchSize: 0 }); // online = all human
+      ui.online = true;
+      ui.mode = "online";
+      (state.p || []).forEach(([id, slot]) => {
+        const p = PLAYER_POOL.find((x) => x.id === id);
+        if (p) game.draft(p, slot);
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   function renderManagerNameInputs() {
@@ -76,16 +129,19 @@
       inp.value = prevName[i] || "";
       row.appendChild(inp);
 
-      const cpuLabel = el("label", "cpu-toggle");
-      const cb = el("input");
-      cb.type = "checkbox";
-      cb.checked = !!prevCpu[i];
-      cpuLabel.appendChild(cb);
-      cpuLabel.appendChild(el("span", null, "🤖 CPU controls this seat"));
-      cb.addEventListener("change", () => {
-        inp.placeholder = cb.checked ? `CPU ${i + 1}` : `Manager ${i + 1}`;
-      });
-      row.appendChild(cpuLabel);
+      // CPU seats only make sense in local mode.
+      if (ui.mode !== "online") {
+        const cpuLabel = el("label", "cpu-toggle");
+        const cb = el("input");
+        cb.type = "checkbox";
+        cb.checked = !!prevCpu[i];
+        cpuLabel.appendChild(cb);
+        cpuLabel.appendChild(el("span", null, "🤖 CPU controls this seat"));
+        cb.addEventListener("change", () => {
+          inp.placeholder = cb.checked ? `CPU ${i + 1}` : `Manager ${i + 1}`;
+        });
+        row.appendChild(cpuLabel);
+      }
 
       wrap.appendChild(row);
     }
@@ -94,11 +150,20 @@
   function startDraft() {
     const rows = Array.from($("#manager-names").querySelectorAll(".mn-row"));
     const names = rows.map((r) => r.querySelector('input[type="text"]').value);
-    const cpuFlags = rows.map((r) => r.querySelector('input[type="checkbox"]').checked);
+    const online = ui.mode === "online";
+    const cpuFlags = online
+      ? names.map(() => false)
+      : rows.map((r) => {
+          const cb = r.querySelector('input[type="checkbox"]');
+          return cb ? cb.checked : false;
+        });
+    ui.online = online;
+    ui.gameGen++;
     game = new DraftGame(names, { benchSize: 0, cpuFlags });
     initCpuProfiles();
     buildDraftStaticUI();
     showScreen("#draft-screen");
+    if (online) pushOnlineState();
     renderDraft();
   }
 
@@ -165,9 +230,14 @@
     });
 
     $("#search").value = "";
+    let searchTimer = null;
     $("#search").oninput = (e) => {
-      ui.search = e.target.value.toLowerCase();
-      renderPlayerList();
+      const v = e.target.value.toLowerCase();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        ui.search = v;
+        renderPlayerList();
+      }, 120); // debounce so typing doesn't re-sort/re-render every keystroke
     };
     $("#sort-by").value = ui.sortBy;
     $("#sort-by").onchange = (e) => {
@@ -176,6 +246,21 @@
     };
 
     $("#slot-cancel").onclick = closeModal;
+    $("#copy-link").onclick = copyShareLink;
+  }
+
+  function copyShareLink() {
+    const url = location.href;
+    const btn = $("#copy-link");
+    const done = () => {
+      btn.textContent = "✅ Link copied — send it on!";
+      setTimeout(() => (btn.textContent = "🔗 Copy link to send"), 2500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, () => prompt("Copy this link:", url));
+    } else {
+      prompt("Copy this link:", url);
+    }
   }
 
   function renderDraft() {
@@ -184,6 +269,7 @@
       return;
     }
     renderStatus();
+    renderSharePanel();
     renderDraftBoard();
     renderTeamNeeds();
     renderPlayerList();
@@ -193,6 +279,20 @@
     scheduleCpuPick();
   }
 
+  /** The online relay banner: whose turn it is + a copy-link button. */
+  function renderSharePanel() {
+    const panel = $("#share-panel");
+    if (!ui.online) {
+      panel.classList.add("hidden");
+      return;
+    }
+    panel.classList.remove("hidden");
+    const m = game.currentManager();
+    panel.querySelector(".share-turn").innerHTML = `🔗 It's <b>${m.name}</b>'s turn`;
+    panel.querySelector(".share-instr").textContent =
+      `${m.name}: make your pick below, then copy this link and send it to the next manager so they can take their turn.`;
+  }
+
   // ---- CPU autodraft -----------------------------------------------------
   const CPU_DELAY_MS = 850; // brief pause so picks are watchable
 
@@ -200,14 +300,12 @@
     const m = game.currentManager();
     if (!m || !m.isCpu) return;
     closeModal(); // a CPU never uses the manual slot picker
-    ui.cpuThinking = true;
+    const gen = ui.gameGen; // capture: ignore this timer if a new draft starts
     setTimeout(() => {
-      // Re-check: state may have changed (e.g. a New Draft) while we waited.
-      if (!game || game.isComplete) return;
+      if (gen !== ui.gameGen || !game || game.isComplete) return;
       const cur = game.currentManager();
       if (!cur || !cur.isCpu) return;
       const choice = cpuChoose(cur);
-      ui.cpuThinking = false;
       if (choice) commitPick(choice.player, choice.slot);
     }, CPU_DELAY_MS);
   }
@@ -293,9 +391,16 @@
       list = list.filter((p) => p.name.toLowerCase().includes(ui.search));
     }
 
+    // For "fit" we decorate-sort-undecorate: compute bestFit once per player
+    // (not twice per comparison). Other keys are cheap/memoized.
+    if (ui.sortBy === "fit") {
+      return list
+        .map((p) => ({ p, k: bestFit(m, p) }))
+        .sort((a, b) => b.k - a.k)
+        .map((x) => x.p);
+    }
     const sorters = {
       career: (a, b) => careerRating(b) - careerRating(a),
-      fit: (a, b) => bestFit(m, b) - bestFit(m, a),
       peak: (a, b) => peakOverall(b) - peakOverall(a),
       winner: (a, b) => b.career.winning - a.career.winning,
       durable: (a, b) => a.injuryRisk - b.injuryRisk,
@@ -323,6 +428,7 @@
       return;
     }
 
+    const frag = document.createDocumentFragment();
     players.forEach((p) => {
       const ovr = careerRating(p);
       const canDraft = !cpuOnClock && game.canDraft(m, p);
@@ -336,7 +442,7 @@
 
       const meta = el("div", "player-meta");
       meta.innerHTML = `
-        <div class="pname">${p.name} ${injuryDot(p.injuryRisk)}</div>
+        <div class="pname">${tierBadge(p)} ${p.name} ${injuryDot(p.injuryRisk)}</div>
         <div class="psub">
           <span class="tag pos">${p.eligible.join("/")}</span>
           <span class="tag" title="Career-peak ability">Peak ${peakOverall(p)}</span>
@@ -360,8 +466,9 @@
       row.appendChild(badge);
       row.appendChild(meta);
       row.appendChild(actions);
-      list.appendChild(row);
+      frag.appendChild(row);
     });
+    list.appendChild(frag);
   }
 
   function ovrColor(ovr) {
@@ -407,6 +514,7 @@
 
   function commitPick(player, slot) {
     game.draft(player, slot);
+    pushOnlineState(); // keep the shareable link in sync with every pick
     renderDraft();
   }
 
@@ -556,7 +664,11 @@
     renderPodium(results);
     renderResultsDetail(results);
     showScreen("#results-screen");
-    $("#play-again").onclick = () => location.reload();
+    $("#play-again").onclick = () => {
+      // Clear any shared-link state so a new draft starts fresh.
+      history.replaceState(null, "", location.pathname + location.search);
+      location.reload();
+    };
   }
 
   function renderPodium(results) {
@@ -589,7 +701,7 @@
         if (!p) return `<div class="res-slot empty"><span class="res-pos">${slot}</span><span class="res-pname">— empty —</span></div>`;
         return `<div class="res-slot">
             <span class="res-pos">${slot}</span>
-            <span class="res-pname">${p.name}</span>
+            <span class="res-pname">${tierBadge(p)} ${p.name}</span>
             <span class="res-ptag">${SCORING.usageTier(p)}</span>
             <span class="res-prate">${careerRating(p)}</span>
           </div>`;
@@ -648,5 +760,19 @@
   }
 
   // ---- Boot --------------------------------------------------------------
-  document.addEventListener("DOMContentLoaded", initSetup);
+  function boot() {
+    initSetup();
+    // If opened via a shared online-draft link, jump straight into the draft.
+    if (loadFromHash()) {
+      ui.gameGen++;
+      buildDraftStaticUI();
+      if (game.isComplete) {
+        showResults();
+      } else {
+        showScreen("#draft-screen");
+        renderDraft();
+      }
+    }
+  }
+  document.addEventListener("DOMContentLoaded", boot);
 })();

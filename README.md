@@ -18,16 +18,22 @@ No install, no backend, no internet required. Just open the page.
 
 ## How to play
 
-1. Open `index.html` in any modern browser.
-2. Choose the number of managers (2–8), tick **🤖 CPU** for any empty seats, and
-   enter names.
-3. Draft in **snake order**: Manager 1 → 2 → 3 → … → 3 → 2 → 1 → … The manager
+1. Open `index.html` (or the live link) in any modern browser.
+2. Pick a **mode**:
+   - **Local** — everyone drafts on one device, taking turns; tick **🤖 CPU** for
+     any seats you want the computer to fill.
+   - **Online** — each manager plays from their own device. After you make your
+     pick, hit **Copy link to send** and pass the link to the next manager; they
+     open it, see the full draft so far, take their turn, and pass it on. No
+     accounts, no server — the whole draft state travels in the link. (No CPUs.)
+3. Choose the number of managers (2–8) and enter names.
+4. Draft in **snake order**: Manager 1 → 2 → 3 → … → 3 → 2 → 1 → … The manager
    who picks last in a round picks first in the next.
-4. Each manager drafts a **starting five** — **PG / SG / SF / PF / C** — with
+5. Each manager drafts a **starting five** — **PG / SG / SF / PF / C** — with
    reasonable positional flexibility (a combo guard can slot at PG or SG, a
    forward at SF or PF, etc.). No bench. Every team's roster is visible to
    everyone throughout the draft.
-5. When all fives are full, the **15-year projection** runs and ranks every team.
+6. When all fives are full, the **15-year projection** runs and ranks every team.
 
 ## The rules, encoded
 
@@ -49,6 +55,12 @@ player's entire career, who would you pick?"** Every roster plays a normalized
 15-season career together (everyone a rookie in year 0, everyone aging in
 lockstep). Players who haven't played 15 years yet are projected forward, so a
 generational young talent like Wembanyama rates as a top pick.
+
+Players are bucketed into **talent tiers** (Superstar → All-NBA → All-Star →
+Quality starter → Starter → Role player) and scored with a **value-above-
+replacement** lens: a convex **dominance** bonus rewards players who can be the
+best player on the floor (efficient primary shot creation), so franchise alphas
+pull clearly away from ancillary/secondary pieces rather than bunching together.
 
 Three pillars drive a player's value, with **talent doing most of the work**:
 
@@ -76,6 +88,19 @@ Elite, high-IQ players who can shoot/play off the ball coexist fine (the way the
 do in the Olympics / All-Star settings), so a roster of stars isn't punished for
 "usage" — only genuinely non-spacing ball-stoppers or stacked paint-bound bigs
 clog things up.
+
+**Dynamic, position-aware fit.** Each roster's composite is unique to *who is at
+which slot*: a player is valued slightly higher at his natural position, and a
+"lineup construction" term rewards a lead initiator at the point, shooting at the
+2, a two-way wing at the 3, a stretch/glass 4, and a rim-protecting anchor at
+center — so the same five players can grade out differently depending on how
+they're arranged, and every addition recomputes the whole team's chemistry,
+synergy and projection.
+
+> **Performance:** per-player ratings (`careerRating`, `peakOverall`, `dominance`)
+> and pairwise synergy are memoized, and the 15-season projection hoists all
+> season-invariant work out of the loop — so the board, sorting and results stay
+> snappy even with constant re-rendering.
 
 On top of talent, each lineup earns a **team-fit / chemistry** grade combining
 on-court fit with human factors:

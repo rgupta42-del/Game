@@ -33,12 +33,24 @@ const POS_WEIGHTS = {
 };
 
 /**
+ * Per-player memoization. Career ratings, peak ratings and dominance depend only
+ * on a player's (static) profile, but are read constantly while rendering the
+ * board, sorting and projecting rosters. Caching them by player id turns a lot
+ * of repeated O(15)/O(8) work into a single lookup.
+ */
+const _peakCache = new Map();
+const _careerCache = new Map();
+const _domCache = new Map();
+
+/**
  * Career-PEAK overall (0..99): how good a player is at their best — i.e. how
  * good a centerpiece you'd be building around. We reward elite top-end skills
  * and on-ball shot creation (what separates a franchise #1 from a great role
  * player), so the scale puts inner-circle stars in the 90s.
  */
 function peakOverall(player) {
+  const cached = _peakCache.get(player.id);
+  if (cached !== undefined) return cached;
   const r = player.ratings;
   const w = POS_WEIGHTS[player.pos] || POS_WEIGHTS.SF;
   let base = 0;
@@ -59,7 +71,30 @@ function peakOverall(player) {
       (e.blocks != null ? e.blocks : r.interiorD)) / 4;
 
   const val = base * 0.38 + top3 * 0.23 + creation * 0.25 + defComposite * 0.14;
-  return Math.round(clamp(val, 0, 99));
+  const result = Math.round(clamp(val, 0, 99));
+  _peakCache.set(player.id, result);
+  return result;
+}
+
+/**
+ * DOMINANCE (0..~100) — can this player be the best player on the floor / the
+ * engine a contender is built around? It rewards efficient primary shot creation
+ * (volume scoring + on-ball creation + playmaking, scaled by scoring efficiency),
+ * which is what separates a dominant alpha from an ancillary/secondary piece. A
+ * high-volume but inefficient scorer (Trae) does NOT read as dominant.
+ */
+function dominance(player) {
+  const cached = _domCache.get(player.id);
+  if (cached !== undefined) return cached;
+  const r = player.ratings;
+  const e = player.ext || {};
+  const creation = r.scoring * 0.55 + r.playmaking * 0.25 + Math.max(r.shooting, r.scoring) * 0.20;
+  const primaryImpact = r.scoring * 0.45 + creation * 0.35 + r.playmaking * 0.20;
+  const eff = e.efficiency != null ? e.efficiency : 70;
+  const effMult = clamp(0.82 + (eff - 70) / 90, 0.78, 1.05);
+  const result = primaryImpact * effMult;
+  _domCache.set(player.id, result);
+  return result;
 }
 
 /**
@@ -112,6 +147,8 @@ function effectiveSeasonValue(player, t) {
  * talents land in the 90s.
  */
 function careerRating(player) {
+  const cached = _careerCache.get(player.id);
+  if (cached !== undefined) return cached;
   const peak = peakOverall(player);
 
   // Average of the career arc (how much elite value across 15 seasons).
@@ -148,8 +185,41 @@ function careerRating(player) {
 
   const intangibleNudge = (c.elevates - 74) / 11 + (twoWayWinning - 68) / 10 + efficiencyNudge - scoringFloor;
 
-  const val = peak * 0.85 + peak * longevity * 0.13 + intangibleNudge;
-  return clamp(Math.round(val), 0, 99);
+  // DOMINANCE bonus: a convex lift that only rewards genuinely dominant primary
+  // options, so franchise alphas pull clearly away from secondary/role pieces
+  // (value-above-replacement stretches at the top of the curve).
+  const dominanceBonus = Math.max(0, dominance(player) - 82) * 0.55;
+
+  const val = peak * 0.85 + peak * longevity * 0.13 + intangibleNudge + dominanceBonus;
+  const result = clamp(Math.round(val), 0, 99);
+  _careerCache.set(player.id, result);
+  return result;
+}
+
+/**
+ * Replacement level — the value of a freely-available starter you could roster
+ * without using a meaningful pick. Value-above-replacement is measured against
+ * this so the gap to a true star is explicit.
+ */
+const REPLACEMENT_LEVEL = 68;
+
+/** Value above replacement: how much more valuable than a replacement starter. */
+function valueAboveReplacement(player) {
+  return careerRating(player) - REPLACEMENT_LEVEL;
+}
+
+/**
+ * Talent tier for a player — a coarse, intuitive bucket that positions players
+ * by how much they dominate / drive winning.
+ */
+function playerTier(player) {
+  const c = careerRating(player);
+  if (c >= 92) return { n: 1, label: "Superstar", short: "S" };
+  if (c >= 87) return { n: 2, label: "All-NBA", short: "1" };
+  if (c >= 82) return { n: 3, label: "All-Star", short: "2" };
+  if (c >= 77) return { n: 4, label: "Quality starter", short: "3" };
+  if (c >= 72) return { n: 5, label: "Starter", short: "4" };
+  return { n: 6, label: "Role player", short: "R" };
 }
 
 // --------------------------------------------------------------------------
@@ -229,7 +299,11 @@ const ext = (p) => p.ext || {};
  * plus a perimeter stopper covers all levels; twin shot-blockers wall the paint;
  * two weak defenders can be hunted.
  */
+const _pairCache = new Map();
 function pairSynergy(a, b) {
+  const key = a.id + "|" + b.id;
+  const hit = _pairCache.get(key);
+  if (hit !== undefined) return hit;
   const ra = a.ratings, rb = b.ratings;
   const ca = a.career, cb = b.career;
   const ea = ext(a), eb = ext(b);
@@ -287,7 +361,9 @@ function pairSynergy(a, b) {
     def -= 6; defReason = "two weak defenders can be hunted";
   }
 
-  return { off, def, offReason, defReason };
+  const result = { off, def, offReason, defReason };
+  _pairCache.set(key, result);
+  return result;
 }
 
 /** Sum pairwise synergy across a lineup; returns { off, def, pairs }. */
@@ -397,77 +473,126 @@ function chemistryForLineup(starters) {
 // --------------------------------------------------------------------------
 
 function strengthToWins(strength) {
-  return clamp(18 + (strength - 40) * 1.3, 15, 73);
+  return clamp(14 + (strength - 40) * 1.3, 15, 72);
 }
 
-/** Project a single career season (t). Bench depth covers faded/aged starters. */
-function projectSeason(roster, t) {
+/**
+ * How well a player suits the slot they're being asked to play. Full value at
+ * their natural position, a small haircut at a secondary-eligible spot.
+ */
+function positionMultiplier(player, slot) {
+  if (player.pos === slot) return 1.0;
+  if (player.eligible.includes(slot)) return 0.975;
+  return 0.94;
+}
+
+/**
+ * Lineup construction (position-aware): rewards putting the right archetype in
+ * the right slot — a lead initiator at the point, a rim-protecting anchor at
+ * center, a two-way wing at the 3, shooting at the 2, a stretch/glass 4. This is
+ * what makes each roster's composite genuinely depend on WHO is at WHICH spot.
+ */
+function lineupConstruction(roster) {
+  const s = roster.starters;
+  let score = 0;
+  if (s.PG) score += s.PG.ratings.playmaking >= 80 ? 3 : s.PG.ratings.playmaking >= 72 ? 0 : -3;
+  if (s.SG) score += s.SG.ratings.shooting >= 74 ? 2 : s.SG.ratings.shooting >= 66 ? 0 : -2;
+  if (s.SF) score += s.SF.ratings.perimeterD >= 76 ? 2 : 0;
+  if (s.PF) score += (s.PF.ratings.shooting >= 72 ? 1.5 : 0) + (s.PF.ratings.rebounding >= 70 ? 1 : 0);
+  if (s.C) {
+    const c = s.C;
+    score += c.ratings.interiorD >= 78 || (c.ext && c.ext.blocks >= 80) ? 3 : -3;
+    score += c.ratings.rebounding >= 78 ? 1 : 0;
+  }
+  return score; // ~ -8 .. +12
+}
+
+/**
+ * Pre-compute everything about a roster that does NOT change season-to-season,
+ * so the 15-season loop only does the cheap, t-dependent arithmetic. Big win for
+ * evaluateRoster, which is called for every team on the results screen.
+ */
+function rosterContext(roster) {
   const starters = [];
-  let starterValueSum = 0;
-  let filledSlots = 0;
-
-  const benchVals = roster.bench
-    .filter(Boolean)
-    .map((p) => ({ p, v: effectiveSeasonValue(p, t) }))
-    .sort((a, b) => b.v - a.v);
-  let benchPtr = 0;
-
+  const posMult = [];
   for (const pos of POSITIONS) {
     const p = roster.starters[pos];
     if (!p) continue;
-    filledSlots++;
-    let val = effectiveSeasonValue(p, t);
-    if (benchPtr < benchVals.length && benchVals[benchPtr].v > val) {
-      val = benchVals[benchPtr].v;
-      benchPtr++;
-    }
-    starterValueSum += val;
     starters.push(p);
+    posMult.push(positionMultiplier(p, pos));
+  }
+  const filled = starters.length;
+  const completeness = filled / POSITIONS.length;
+  const bench = roster.bench ? roster.bench.filter(Boolean) : [];
+
+  if (filled === 0) {
+    return { starters, posMult, bench, filled, completeness, chemistry: 0, construction: 0,
+      elevateBoost: 0, avgWinning: 0, avgClutch: 0, alphaBoost: 0 };
   }
 
-  if (filledSlots === 0) {
-    return { wins: 15, playoffIndex: 0, titleProb: 0, avgStarterValue: 0, chemistry: 0 };
+  // Lineup construction (who's at which slot) folds into chemistry, so each
+  // roster's fit — and thus its composite — is unique to its position assignment.
+  const construction = lineupConstruction(roster);
+  const chemistry = clamp(chemistryForLineup(starters) + construction, 0, 100) * (0.6 + 0.4 * completeness);
+  const avgElevates = starters.reduce((s, p) => s + p.career.elevates, 0) / filled;
+  const avgWinning = starters.reduce((s, p) => s + p.career.winning, 0) / filled;
+  const avgClutch = starters.reduce((s, p) => s + (ext(p).clutch != null ? ext(p).clutch : 70), 0) / filled;
+  // A dominant #1 option lifts a team's playoff ceiling (alphas win playoff games).
+  const maxDom = Math.max(...starters.map((p) => dominance(p)));
+  const alphaBoost = Math.max(0, maxDom - 86) * 0.25;
+
+  return {
+    starters, posMult, bench, filled, completeness, chemistry, construction,
+    elevateBoost: (avgElevates - 70) * 0.06, avgWinning, avgClutch, alphaBoost,
+  };
+}
+
+/** Project a single career season (t) from a precomputed roster context. */
+function projectSeason(ctx, t) {
+  if (ctx.filled === 0) return { wins: 15, playoffIndex: 0, titleProb: 0, avgStarterValue: 0, chemistry: 0 };
+
+  // Per-starter season value (position-adjusted). Bench can cover a faded
+  // starter if it ever has anyone (benchSize is 0 in the live game).
+  const benchVals = ctx.bench.length
+    ? ctx.bench.map((p) => effectiveSeasonValue(p, t)).sort((a, b) => b - a)
+    : null;
+  let benchPtr = 0;
+
+  const vals = new Array(ctx.filled);
+  let sum = 0;
+  for (let i = 0; i < ctx.filled; i++) {
+    let v = effectiveSeasonValue(ctx.starters[i], t) * ctx.posMult[i];
+    if (benchVals && benchPtr < benchVals.length && benchVals[benchPtr] > v) v = benchVals[benchPtr++];
+    vals[i] = v;
+    sum += v;
   }
 
-  const avgStarterValue = starterValueSum / filledSlots;
-  const completeness = filledSlots / POSITIONS.length;
-  const chemistry = chemistryForLineup(starters) * (0.6 + 0.4 * completeness);
-
-  // Elevators make the whole greater than the sum of parts.
-  const avgElevates = starters.reduce((s, p) => s + p.career.elevates, 0) / filledSlots;
-  const elevateBoost = (avgElevates - 70) * 0.06;
-
-  // Talent dominates; chemistry/fit shades the result rather than deciding it,
-  // so a loaded-but-imperfect collection of elite players still wins a lot —
-  // elite players tend to figure out how to play together.
+  const avgStarterValue = sum / ctx.filled;
   const strength =
-    (avgStarterValue * 0.85 + chemistry * 0.15 + elevateBoost) * (0.6 + 0.4 * completeness);
+    (avgStarterValue * 0.85 + ctx.chemistry * 0.15 + ctx.elevateBoost) *
+    (0.6 + 0.4 * ctx.completeness);
   const wins = strengthToWins(strength);
 
-  // Playoffs reward star power, defense, fit and proven winners.
-  const sortedVals = starters.map((p) => effectiveSeasonValue(p, t)).sort((a, b) => b - a);
+  const sortedVals = vals.slice().sort((a, b) => b - a);
   const best = sortedVals[0] || 0;
   const top3 = sortedVals.slice(0, 3);
-  const top3Avg = top3.reduce((s, v) => s + v, 0) / Math.max(1, top3.length);
-  const avgWinning = starters.reduce((s, p) => s + p.career.winning, 0) / filledSlots;
-  const avgClutch = starters.reduce((s, p) => s + (ext(p).clutch != null ? ext(p).clutch : 70), 0) / filledSlots;
+  const top3Avg = top3.reduce((s, v) => s + v, 0) / top3.length;
 
-  // Playoffs reward star power, defense, fit, proven winners AND clutch — so a
-  // clutch, playoff-built team can win titles beyond what its record suggests.
+  // Playoffs reward star power, defense, fit, proven winners, clutch, and having
+  // a genuine alpha — so a clutch, star-led, playoff-built team can win titles
+  // beyond what its regular-season record suggests.
   const playoffStrength =
-    best * 0.38 + top3Avg * 0.25 + chemistry * 0.16 + avgStarterValue * 0.08 +
-    avgWinning * 0.06 + avgClutch * 0.07;
-  const playoffIndex = clamp((playoffStrength - 45) * 1.6, 0, 100) * completeness;
+    best * 0.38 + top3Avg * 0.25 + ctx.chemistry * 0.16 + avgStarterValue * 0.08 +
+    ctx.avgWinning * 0.06 + ctx.avgClutch * 0.07 + ctx.alphaBoost;
+  const playoffIndex = clamp((playoffStrength - 45) * 1.6, 0, 100) * ctx.completeness;
+  const titleProb = clamp((playoffStrength - 70) / 26, 0, 1) ** 1.7 * 0.42 * ctx.completeness;
 
-  // Per-season championship probability (capped); summed over 15 years this lands
-  // a dynasty around 3-5 titles, a contender ~1-2, a pretender ~0.
-  const titleProb = clamp((playoffStrength - 66) / 22, 0, 1) ** 1.6 * 0.55 * completeness;
-
-  return { wins, playoffIndex, titleProb, avgStarterValue, chemistry };
+  return { wins, playoffIndex, titleProb, avgStarterValue, chemistry: ctx.chemistry };
 }
 
 /** Full 15-season evaluation of a roster. */
 function evaluateRoster(roster) {
+  const ctx = rosterContext(roster); // hoist all season-invariant work out of the loop
   const seasons = [];
   let winsSum = 0;
   let playoffSum = 0;
@@ -475,7 +600,7 @@ function evaluateRoster(roster) {
   let peakWins = 0;
 
   for (let t = 0; t < PROJECTION_YEARS; t++) {
-    const s = projectSeason(roster, t);
+    const s = projectSeason(ctx, t);
     seasons.push(s);
     winsSum += s.wins;
     playoffSum += s.playoffIndex;
@@ -500,7 +625,6 @@ function evaluateRoster(roster) {
     championships, // rounded total titles over 15 years
     composite,
     seasons,
-    breakdown: buildBreakdown(roster, avgPlayoffIndex, titlesExpected),
   };
 }
 
@@ -511,70 +635,6 @@ function playoffLabel(idx) {
   if (idx < 70) return "Conference finals";
   if (idx < 84) return "NBA Finals";
   return "Championship favorite";
-}
-
-function buildBreakdown(roster, avgPlayoffIndex, titlesExpected) {
-  const starters = starterPlayers(roster);
-  const r = (p) => p.ratings;
-  const c = (p) => p.career;
-  const notes = [];
-
-  if (starters.length < POSITIONS.length) {
-    notes.push(`⚠️ Incomplete starting five (${starters.length}/5 positions filled).`);
-  }
-
-  const shooters = starters.filter((p) => r(p).shooting >= 74).length;
-  if (shooters >= 3) notes.push("✅ Excellent floor spacing.");
-  else if (shooters <= 1) notes.push("⚠️ Cramped spacing — not enough shooting.");
-
-  if (starters.some((p) => r(p).interiorD >= 82)) notes.push("✅ Has a real rim protector.");
-  else notes.push("⚠️ Soft interior defense — no rim protector.");
-
-  if (starters.some((p) => r(p).playmaking >= 82)) notes.push("✅ Has a primary playmaking engine.");
-  else notes.push("⚠️ No high-end creator to run the offense.");
-
-  if (starters.some((p) => r(p).scoring >= 88)) notes.push("✅ Has a go-to bucket-getter for the playoffs.");
-  else notes.push("⚠️ Lacks a true number-one scoring option.");
-
-  const creators = starters.filter((p) => c(p).ballDominance >= 80).length;
-  const offBall = starters.filter((p) => c(p).ballDominance <= 62 && r(p).shooting >= 74).length;
-  if (creators >= 3) notes.push(`⚠️ Usage logjam — ${creators} ball-dominant scorers competing for one ball.`);
-  else if (creators >= 1 && offBall >= 2) notes.push("✅ Balanced shot distribution — creators surrounded by off-ball shooters.");
-  else if (creators === 0) notes.push("⚠️ No high-usage shot creator to generate offense.");
-
-  const avgElevates = starters.reduce((s, p) => s + c(p).elevates, 0) / Math.max(1, starters.length);
-  if (avgElevates >= 84) notes.push("✅ Roster full of teammate-elevators — plays bigger than the sum of its parts.");
-
-  const worstCulture = starters.length ? Math.min(...starters.map((p) => c(p).culture)) : 100;
-  if (worstCulture < 45) notes.push("☣️ Locker-room risk — a potential team cancer in the mix.");
-  else if (starters.every((p) => c(p).culture >= 82)) notes.push("🤝 Strong culture and coachability throughout.");
-
-  const avgInjury = starters.reduce((s, p) => s + p.injuryRisk, 0) / Math.max(1, starters.length);
-  if (avgInjury >= 55) notes.push("🩼 High injury risk across the core — availability is a real concern.");
-  else if (avgInjury <= 28) notes.push("💪 Very durable core — low injury risk.");
-
-  const avgAging = starters.reduce((s, p) => s + c(p).aging, 0) / Math.max(1, starters.length);
-  if (avgAging >= 82) notes.push("🍷 Games that age gracefully — sustained value deep into the 15-year window.");
-  else if (avgAging <= 65) notes.push("⏳ Athleticism-reliant core — values fade in the back half of the window.");
-
-  const avgWinning = starters.reduce((s, p) => s + c(p).winning, 0) / Math.max(1, starters.length);
-  if (avgWinning >= 85) notes.push("🏆 Proven winners — this group rises in the postseason.");
-
-  const avgClutch = starters.reduce((s, p) => s + (ext(p).clutch || 70), 0) / Math.max(1, starters.length);
-  if (avgClutch >= 85) notes.push("🧊 Ice in their veins — elite clutch shot-making for tight playoff games.");
-  else if (avgClutch <= 62) notes.push("😬 Questionable in the clutch — may shrink in close games.");
-
-  const avgSteals = starters.reduce((s, p) => s + (ext(p).steals || 40), 0) / Math.max(1, starters.length);
-  const avgBlocks = starters.reduce((s, p) => s + (ext(p).blocks || 40), 0) / Math.max(1, starters.length);
-  if ((avgSteals + avgBlocks) / 2 >= 68) notes.push("🦅 Disruptive, event-creating defense (steals + blocks).");
-
-  // Notable teammate pairings (roster construction).
-  synergyNotes(roster).forEach((s) => notes.push(s.text));
-
-  notes.push(`🏆 Expected titles over 15 years: ${titlesExpected.toFixed(2)}.`);
-  notes.push(`📅 Typical postseason result: ${playoffLabel(avgPlayoffIndex)}.`);
-
-  return notes;
 }
 
 // --------------------------------------------------------------------------
@@ -780,6 +840,9 @@ const SCORING = {
   PROJECTION_YEARS,
   peakOverall,
   careerRating,
+  dominance,
+  valueAboveReplacement,
+  playerTier,
   seasonValue,
   availability,
   effectiveSeasonValue,
