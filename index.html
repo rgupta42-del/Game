@@ -49,6 +49,32 @@
           <select id="num-managers"></select>
         </div>
 
+        <div class="field">
+          <label for="clock-select">Pick clock</label>
+          <select id="clock-select">
+            <option value="0">No clock</option>
+            <option value="30">0:30</option>
+            <option value="45">0:45</option>
+            <option value="60" selected>1:00</option>
+            <option value="90">1:30</option>
+            <option value="120">2:00</option>
+          </select>
+          <span class="hint">When the clock hits zero, the best available player is auto-picked.</span>
+        </div>
+
+        <div class="field">
+          <label>Eras to include</label>
+          <div id="era-filters" class="era-filters"></div>
+          <span class="hint">Only players who starred in a checked decade are draftable.</span>
+        </div>
+
+        <div class="field">
+          <label class="cap-toggle">
+            <input type="checkbox" id="cap-toggle" />
+            <span>💰 Salary-cap mode — each team has a $200 cap (stars cost more, so you can't stack a Tier-1A roster)</span>
+          </label>
+        </div>
+
         <p class="hint">Each manager drafts a starting five — PG, SG, SF, PF and C. No bench.</p>
 
         <div id="manager-names" class="manager-names"></div>
@@ -65,10 +91,12 @@
           <span id="onclock-name" class="onclock-name">—</span>
           <span id="onclock-meta" class="onclock-meta"></span>
         </div>
+        <div id="pick-clock" class="pick-clock hidden"><span id="clock-time">1:00</span></div>
         <div class="upcoming">
           <span class="label">Upcoming</span>
           <div id="upcoming-list" class="upcoming-list"></div>
         </div>
+        <div id="cap-status" class="cap-status hidden"></div>
         <div id="must-fill-banner" class="must-fill hidden"></div>
       </div>
 

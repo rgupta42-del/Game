@@ -40,7 +40,15 @@
     staticBuilt: false,
     gameGen: 0, // generation counter so stale CPU timers can't fire into a new game
     pendingPlayer: null, // player awaiting slot assignment in the modal
+    clockSeconds: 60, // pick clock length (0 = off)
+    capMode: false, // salary-cap drafting
+    allowedEras: ["80s", "90s", "00s", "10s", "20s"],
   };
+  const SALARY_CAP = SCORING.SALARY_CAP;
+  const eraAllowed = (p) => (p.eras || []).some((d) => ui.allowedEras.includes(d));
+  const salaryOf = (p) => SCORING.salaryValue(p);
+  const managerSpent = (m) =>
+    SCORING.starterPlayers({ starters: m.starters, bench: [] }).reduce((s, p) => s + salaryOf(p), 0);
 
   const injuryDot = (risk) => {
     if (risk >= 60) return `<span class="injury-dot" title="High injury risk (${risk})">🔴</span>`;
@@ -60,6 +68,21 @@
       if (i === 4) o.selected = true;
       numSel.appendChild(o);
     }
+
+    // Era (decade) filter chips — all on by default.
+    const eraWrap = $("#era-filters");
+    eraWrap.innerHTML = "";
+    ["80s", "90s", "00s", "10s", "20s"].forEach((d) => {
+      const lab = el("label", "era-chip on");
+      const cb = el("input");
+      cb.type = "checkbox";
+      cb.value = d;
+      cb.checked = true;
+      cb.addEventListener("change", () => lab.classList.toggle("on", cb.checked));
+      lab.appendChild(cb);
+      lab.appendChild(el("span", null, d));
+      eraWrap.appendChild(lab);
+    });
 
     renderManagerNameInputs();
     numSel.addEventListener("change", renderManagerNameInputs);
@@ -95,7 +118,11 @@
     decodeURIComponent(escape(atob(s.replace(/-/g, "+").replace(/_/g, "/"))));
 
   function encodeGameState() {
-    const state = { n: game.managers.map((m) => m.name), p: game.pickLog.map((e) => [e.player.id, e.slot]) };
+    const state = {
+      n: game.managers.map((m) => m.name),
+      p: game.pickLog.map((e) => [e.player.id, e.slot]),
+      cfg: currentConfig(),
+    };
     return b64urlEncode(JSON.stringify(state));
   }
 
@@ -114,6 +141,7 @@
       game = new DraftGame(state.n, { benchSize: 0 }); // online = all human
       ui.online = true;
       ui.mode = "online";
+      applyConfig(state.cfg);
       (state.p || []).forEach(([id, slot]) => {
         const p = PLAYER_POOL.find((x) => x.id === id);
         if (p) game.draft(p, slot);
@@ -144,22 +172,23 @@
     });
   }
 
-  /** Host: create a live room, claim seat 0, start watching. */
+  /** Host: create a live room, then choose a seat (any pick slot), start watching. */
   function startLiveDraft(names) {
     ui.online = true;
     ui.live = true;
     ui.roomId = randomRoomId();
-    ui.mySeat = 0; // the host plays the first manager
+    ui.mySeat = null; // host chooses their seat just like everyone else (item #2)
     ui.gameGen++;
-    localStorage.setItem(seatKey(ui.roomId), "0");
     rebuildGameFrom(names, []);
     buildDraftStaticUI();
     ui.staticBuilt = true;
     showScreen("#draft-screen");
     renderDraft();
-    FBSync.create(ui.roomId, { names, picks: [], seats: { 0: names[0] || "Manager 1" } })
+    FBSync.create(ui.roomId, { names, picks: [], seats: {}, cfg: currentConfig() })
       .then(() => {
         history.replaceState(null, "", "#room=" + ui.roomId);
+        // Now that the room exists, the host chooses their seat (= their pick slot).
+        showSeatModal(names, {});
         FBSync.watch(ui.roomId, onRoomUpdate);
       })
       .catch((e) => {
@@ -188,6 +217,7 @@
     const names = data.names || [];
     let picks = data.picks || [];
     if (!Array.isArray(picks)) picks = Object.values(picks); // Firebase array quirk
+    applyConfig(data.cfg);
     ui.gameGen++; // invalidate any pending timers
     rebuildGameFrom(names, picks);
 
@@ -277,10 +307,30 @@
     }
   }
 
+  /** Ensure the chosen eras leave enough players to fill every position. */
+  function validateEraPool(numManagers) {
+    for (const pos of STARTER_SLOTS) {
+      const n = PLAYER_POOL.filter((p) => eraAllowed(p) && p.eligible.includes(pos)).length;
+      if (n < numManagers) {
+        return `Not enough ${pos}s in the selected eras (${n}) for ${numManagers} managers. Pick more decades.`;
+      }
+    }
+    return null;
+  }
+
   function startDraft() {
     const rows = Array.from($("#manager-names").querySelectorAll(".mn-row"));
     const names = rows.map((r) => r.querySelector('input[type="text"]').value);
     const online = ui.mode === "online";
+
+    // Read setup options.
+    ui.clockSeconds = parseInt($("#clock-select").value, 10) || 0;
+    ui.capMode = $("#cap-toggle").checked;
+    ui.allowedEras = Array.from($("#era-filters").querySelectorAll("input:checked")).map((c) => c.value);
+    if (ui.allowedEras.length === 0) return alert("Select at least one era.");
+    const eraErr = validateEraPool(names.length);
+    if (eraErr) return alert(eraErr);
+
     const cpuFlags = online
       ? names.map(() => false)
       : rows.map((r) => {
@@ -302,6 +352,17 @@
     showScreen("#draft-screen");
     if (online) pushOnlineState();
     renderDraft();
+  }
+
+  /** Game config that must travel with online links/rooms. */
+  function currentConfig() {
+    return { clock: ui.clockSeconds, cap: ui.capMode, eras: ui.allowedEras };
+  }
+  function applyConfig(cfg) {
+    if (!cfg) return;
+    if (cfg.clock != null) ui.clockSeconds = cfg.clock;
+    if (cfg.cap != null) ui.capMode = cfg.cap;
+    if (Array.isArray(cfg.eras) && cfg.eras.length) ui.allowedEras = cfg.eras;
   }
 
   // Each CPU gets its own temperament (how greedy vs. exploratory) and a draft
@@ -401,6 +462,7 @@
   }
 
   function renderDraft() {
+    stopClock();
     if (game.isComplete) {
       showResults();
       return;
@@ -414,6 +476,55 @@
 
     // Hand the clock to the CPU if this seat is computer-controlled.
     scheduleCpuPick();
+    manageClock();
+  }
+
+  // ---- Pick clock (item 1) -----------------------------------------------
+  function manageClock() {
+    if (ui.clockSeconds <= 0 || game.isComplete) return;
+    const m = game.currentManager();
+    if (!m || m.isCpu) return; // CPUs use their own short delay
+    if (ui.live && !myTurn()) return; // only the on-clock seat's device counts down
+    startClock();
+  }
+  function startClock() {
+    const gen = ui.gameGen;
+    ui.clockRemaining = ui.clockSeconds;
+    $("#pick-clock").classList.remove("hidden");
+    updateClockDisplay();
+    ui.clockTimer = setInterval(() => {
+      if (gen !== ui.gameGen) return clearInterval(ui.clockTimer);
+      ui.clockRemaining -= 1;
+      updateClockDisplay();
+      if (ui.clockRemaining <= 0) {
+        clearInterval(ui.clockTimer);
+        const cur = game.currentManager();
+        if (cur && !cur.isCpu) autoPick(cur);
+      }
+    }, 1000);
+  }
+  function stopClock() {
+    if (ui.clockTimer) clearInterval(ui.clockTimer);
+    ui.clockTimer = null;
+    $("#pick-clock").classList.add("hidden");
+  }
+  function updateClockDisplay() {
+    const s = Math.max(0, ui.clockRemaining);
+    $("#clock-time").textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    $("#pick-clock").classList.toggle("warn", s <= 10);
+  }
+  /** Time expired — auto-draft the best available pick for this manager. */
+  function autoPick(manager) {
+    const avail = PLAYER_POOL.filter((p) => isDraftable(manager, p));
+    if (!avail.length) return;
+    avail.sort(
+      (a, b) =>
+        careerRating(b) + 0.15 * bestFit(manager, b) - (careerRating(a) + 0.15 * bestFit(manager, a))
+    );
+    const best = avail[0];
+    const ss = game.legalSlotsFor(manager, best).filter((s) => s !== "BENCH");
+    closeModal();
+    commitPick(best, ss.includes(best.pos) ? best.pos : ss[0]);
   }
 
   /** The online banner: live room status (your turn / waiting) or relay link. */
@@ -470,7 +581,7 @@
    * natural position, bench only as a last resort).
    */
   function cpuChoose(manager) {
-    const avail = PLAYER_POOL.filter((p) => game.canDraft(manager, p));
+    const avail = PLAYER_POOL.filter((p) => isDraftable(manager, p));
     if (avail.length === 0) return null;
 
     const prof = cpuProfiles[manager.id] || { temp: 3.5, style: "best" };
@@ -532,11 +643,50 @@
     } else {
       banner.classList.add("hidden");
     }
+
+    const cap = $("#cap-status");
+    if (ui.capMode) {
+      const spent = managerSpent(m);
+      const left = SALARY_CAP - spent;
+      cap.innerHTML = `💰 ${m.name}: spent <b>$${spent}</b> · left <b>$${left}</b> / $${SALARY_CAP}`;
+      cap.classList.toggle("over", left < 0);
+      cap.classList.remove("hidden");
+    } else {
+      cap.classList.add("hidden");
+    }
+  }
+
+  // Players still on the board and within the selected eras.
+  function availablePlayers() {
+    return PLAYER_POOL.filter((p) => game.isAvailable(p.id) && eraAllowed(p));
+  }
+
+  // Salary-cap helpers (item 8).
+  function minAvailableSalary() {
+    let min = Infinity;
+    for (const p of PLAYER_POOL) {
+      if (!game.isAvailable(p.id) || !eraAllowed(p)) continue;
+      const s = salaryOf(p);
+      if (s < min) min = s;
+    }
+    return min === Infinity ? 2 : min;
+  }
+  function canAfford(manager, player) {
+    if (!ui.capMode) return true;
+    const slotsLeftAfter = manager.starters
+      ? STARTER_SLOTS.filter((s) => !manager.starters[s]).length - 1
+      : 0;
+    const reserve = Math.max(0, slotsLeftAfter) * minAvailableSalary();
+    return managerSpent(manager) + salaryOf(player) + reserve <= SALARY_CAP;
+  }
+  // Legal to draft right now: roster rules + era + (in cap mode) affordability.
+  function isDraftable(manager, player) {
+    return game.canDraft(manager, player) && eraAllowed(player) && canAfford(manager, player);
   }
 
   function visiblePlayers() {
     const m = game.currentManager();
-    let list = PLAYER_POOL.filter((p) => game.isAvailable(p.id));
+    let list = availablePlayers();
 
     if (ui.posFilter !== "ALL") {
       list = list.filter((p) => p.eligible.includes(ui.posFilter));
@@ -586,18 +736,23 @@
     const frag = document.createDocumentFragment();
     players.forEach((p) => {
       const ovr = careerRating(p);
-      const canDraft = !cpuOnClock && !locked && game.canDraft(m, p);
+      const affordable = !ui.capMode || canAfford(m, p);
+      const canDraft = !cpuOnClock && !locked && game.canDraft(m, p) && affordable;
       const fit = Math.round(bestFit(m, p));
 
       const row = el("div", "player-row" + (canDraft ? "" : " disabled"));
 
       const photo = playerPhoto(p, ovr);
 
+      const salTag = ui.capMode
+        ? `<span class="tag salary${affordable ? "" : " unaffordable"}" title="Salary">$${salaryOf(p)}</span>`
+        : "";
       const meta = el("div", "player-meta");
       meta.innerHTML = `
         <div class="pname">${tierBadge(p)} ${p.name} ${injuryDot(p.injuryRisk)}</div>
         <div class="psub">
           <span class="tag pos">${p.eligible.join("/")}</span>
+          ${salTag}
           <span class="tag" title="Career-peak ability">Peak ${peakOverall(p)}</span>
           <span class="tag" title="Clutch shot-making">Clutch ${p.ext.clutch}</span>
           <span class="tag" title="Usage rate (ball dominance ${p.career.ballDominance})">${SCORING.usageTier(p)}</span>
@@ -614,6 +769,8 @@
         actions.appendChild(el("span", "slot-sub", "🤖 CPU"));
       } else if (locked) {
         actions.appendChild(el("span", "slot-sub", "⏳ waiting"));
+      } else if (ui.capMode && !affordable) {
+        actions.appendChild(el("span", "slot-sub", "💰 over cap"));
       } else {
         actions.appendChild(el("span", "slot-sub", "No legal slot"));
       }
@@ -771,7 +928,7 @@
 
   /** Suggest the best complementary pick available for this roster. */
   function recommendPick(manager, analysis) {
-    const avail = PLAYER_POOL.filter((p) => game.canDraft(manager, p));
+    const avail = PLAYER_POOL.filter((p) => isDraftable(manager, p));
     if (avail.length === 0) return null;
     avail.sort((x, y) => bestFit(manager, y) - bestFit(manager, x));
     const top = avail[0];
@@ -936,6 +1093,7 @@
           <div class="res-stat"><b>${ev.bestRecord}</b>Best record at peak</div>
           <div class="res-stat"><b>${ev.championships}</b>Total championships won</div>
           <div class="res-stat"><b>${playoffLabel(ev.avgPlayoffIndex)}</b>Typical postseason</div>
+          <div class="res-stat"><b>${ev.cohesion}</b>Team cohesion</div>
           <div class="res-stat"><b>${Math.round(ev.composite)}</b>Composite score</div>
         </div>
         <div class="res-cols">

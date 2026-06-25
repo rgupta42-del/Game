@@ -37,6 +37,20 @@ No install, no backend, no internet required. Just open the page.
    Hit **📋 Copy results link to share** to send anyone a self-contained link that
    shows those exact results (no setup needed to view).
 
+### Setup options
+
+- **Pick clock** — off, 0:30, 0:45, 1:00 (default), 1:30 or 2:00. When it hits
+  zero the best available player is auto-drafted.
+- **Eras to include** — limit the player pool to any mix of decades (80s / 90s /
+  00s / 10s / 20s). Only players who starred in a checked decade are draftable.
+- **Salary-cap mode** — each team gets a **$200 cap**. Every player has a salary
+  derived from their rating on a steep curve, so a franchise star eats a huge
+  chunk and you can't stack a whole Tier-1A roster — you build a star or two
+  around value pieces.
+- **Online seat choice** — the manager who creates a live room now picks *which*
+  seat (and therefore which draft slot) they want, rather than being forced to
+  pick first.
+
 ### Live online drafts (real-time)
 
 Online mode supports **real-time sync** so each manager drafts from their own

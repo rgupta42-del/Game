@@ -967,6 +967,41 @@ const PLAYER_POOL = [
     // Initials shown when there's no photo (or it fails to load).
     p.initials = p.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
   });
+
+  // --- Generation tags (derived from age) for the decade filter -------------
+  const DECADES = [["80s", 1980, 1989], ["90s", 1990, 1999], ["00s", 2000, 2009], ["10s", 2010, 2019], ["20s", 2020, 2029]];
+  // --- Future injury risk bumps (clot history, big-man wear) ----------------
+  const RISK_BUMP = { wemby: 12, embiid: 4, zion: 6, kporzingis: 4, drobinson: 4, yao: 6 };
+  // --- Legacy: proven, generational accomplishment (championships, MVPs,
+  //     all-time standing). Drives "generational greatness > potential".
+  const LEGACY = {
+    jordan: 100, lebron: 100, magic: 98, bird: 97, kobe: 98, duncan: 98, shaq: 97, hakeem: 96,
+    curry: 97, drobinson: 90, kg: 91, dirk: 93, malone: 86, stockton: 85, pippen: 90, payton: 84,
+    drexler: 86, ewing: 80, barkley: 84, iverson: 82, reggie: 80, nash: 90, kidd: 88, tmac: 74,
+    vince: 78, rayallen: 85, pierce: 86, wade: 93, melo: 78, dwight: 80, granthill: 72, zo: 74,
+    mutombo: 80, ginobili: 90, tparker: 88, pgasol: 86, mgasol: 80, lowry: 82, conley: 74, yao: 78,
+    rsheed: 80, benwallace: 84, billups: 84, iggy: 84, klove: 78, amare: 78, marion: 80, drummond: 62,
+    aldridge: 76, zbo: 70, rondo: 80, broy: 64, arenas: 70, blake: 70, boogie: 62,
+    jokic: 92, giannis: 91, durant: 94, sga: 80, tatum: 84, embiid: 72, luka: 76, wemby: 55,
+    edwards: 64, brunson: 68, booker: 70, mitchell: 64, dlillard: 78, cp3: 86, westbrook: 82,
+    harden: 80, kyrie: 82, klay: 88, draymond: 88, butler: 80, kawhi: 90, pgeorge: 66, adavis: 84,
+    bam: 74, gobert: 80, sabonis: 60, siakam: 76, jbrown: 80, halliburton: 60, fox: 58, trae: 56,
+  };
+
+  PLAYER_POOL.forEach((p) => {
+    const birth = 2026 - p.age;
+    const start = birth + 21, end = Math.min(2026, birth + 36); // ~breakout to end of prime
+    p.eras = DECADES.filter(([, a, b]) => start <= b && end >= a).map((d) => d[0]);
+    if (!p.eras.length) p.eras = ["20s"];
+
+    if (RISK_BUMP[p.id]) p.injuryRisk = clamp(p.injuryRisk + RISK_BUMP[p.id], 5, 95);
+
+    // Legacy: explicit where known, otherwise a conservative derive (so unproven
+    // young stars don't get credited for accomplishments they haven't earned).
+    p.legacy = LEGACY[p.id] != null
+      ? LEGACY[p.id]
+      : clamp(Math.round(p.career.winning * 0.5 + p.career.elevates * 0.15 + 18), 32, 80);
+  });
 })();
 
 // Make available both as a module export and on the global scope (browser).

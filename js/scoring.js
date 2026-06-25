@@ -121,8 +121,11 @@ function careerArc(t, earlyImpact, aging) {
  */
 function availability(player, t) {
   const base = 1 - (player.injuryRisk / 100) * 0.3;
-  const lateWear = t >= 11 ? (t - 10) * 0.008 : 0;
-  return clamp(base - lateWear, 0.5, 1);
+  // Big men break down faster as a career wears on (knees, feet, back), so they
+  // lose more availability in the back half of the 15-year window.
+  const isBig = player.pos === "C" || player.pos === "PF";
+  const lateWear = t >= 9 ? (t - 8) * (isBig ? 0.014 : 0.008) : 0;
+  return clamp(base - lateWear, 0.45, 1);
 }
 
 /** Raw (pre-availability) value of a player in career season t. */
@@ -185,12 +188,28 @@ function careerRating(player) {
 
   const intangibleNudge = (c.elevates - 74) / 11 + (twoWayWinning - 68) / 10 + efficiencyNudge - scoringFloor;
 
-  // DOMINANCE bonus: a convex lift that only rewards genuinely dominant primary
-  // options, so franchise alphas pull clearly away from secondary/role pieces
-  // (value-above-replacement stretches at the top of the curve).
-  const dominanceBonus = Math.max(0, dominance(player) - 82) * 0.55;
+  // DOMINANCE bonus: a convex lift for genuinely dominant primary options.
+  const dominanceBonus = Math.max(0, dominance(player) - 82) * 0.45;
 
-  const val = peak * 0.85 + peak * longevity * 0.13 + intangibleNudge + dominanceBonus;
+  // GENERATIONAL GREATNESS: proven, all-time accomplishment outweighs mere
+  // potential, so established legends sit above unproven-but-talented youngsters.
+  const legacyBonus = ((player.legacy != null ? player.legacy : 60) - 72) * 0.18;
+
+  // CROSS-ERA REFEREE NORMALIZATION: pre-2000 hand-check/physical eras were far
+  // harder to score in (and rim attacks were punished), so production there is
+  // worth more; 20s-only stars are both rules-inflated and still unproven.
+  const eras = player.eras || ["20s"];
+  let eraAdj = 0;
+  if (eras.includes("80s") || eras.includes("90s")) eraAdj += 1.5;
+  else if (eras.includes("00s")) eraAdj += 0.5;
+  if (eras.length === 1 && eras[0] === "20s") eraAdj -= 1.0;
+
+  // SPACING IMPACT: a ball-dominant non-shooter shrinks the floor for everyone.
+  const spacingImpact = c.ballDominance >= 80 && r.shooting < 80 ? (80 - r.shooting) * 0.06 + 1 : 0;
+
+  const val =
+    peak * 0.82 + peak * longevity * 0.13 + intangibleNudge + dominanceBonus +
+    legacyBonus + eraAdj - spacingImpact;
   const result = clamp(Math.round(val), 0, 99);
   _careerCache.set(player.id, result);
   return result;
@@ -220,6 +239,17 @@ function playerTier(player) {
   if (c >= 77) return { n: 4, label: "Quality starter", short: "3" };
   if (c >= 72) return { n: 5, label: "Starter", short: "4" };
   return { n: 6, label: "Role player", short: "R" };
+}
+
+/**
+ * Salary value for a player, on a $200 cap for a five-man starting unit. The
+ * curve is convex, so franchise talents cost disproportionately more — you can
+ * fit one or two stars around role players, but never a whole Tier-1A team.
+ */
+const SALARY_CAP = 200;
+function salaryValue(player) {
+  const r = careerRating(player);
+  return Math.max(2, Math.round(Math.pow(Math.max(0, r - 55), 1.7) * 0.116));
 }
 
 // --------------------------------------------------------------------------
@@ -423,9 +453,14 @@ function chemistryForLineup(starters) {
   const shooters = starters.filter((p) => r(p).shooting >= 74).length;
   let spacing = avgShooting + (shooters >= 3 ? 8 : shooters <= 1 ? -14 : 0);
   const nonShootingBigs = starters.filter(
-    (p) => r(p).shooting < 55 && (p.eligible.includes("C") || p.eligible.includes("PF"))
+    (p) => r(p).shooting < 58 && (p.eligible.includes("C") || p.eligible.includes("PF"))
   ).length;
-  if (nonShootingBigs >= 2) spacing -= 12;
+  if (nonShootingBigs >= 1) spacing -= 6; // even one non-spacing big tightens the paint
+  if (nonShootingBigs >= 2) spacing -= 10; // two is a genuine clog
+  // Ball-dominant non-shooters (e.g. a high-usage, mediocre-shooting forward)
+  // shrink the floor and stall everyone else's offense.
+  const clogs = starters.filter((p) => c(p).ballDominance >= 78 && r(p).shooting < 74).length;
+  if (clogs >= 1) spacing -= clogs * 7;
 
   const hasEngine = starters.some((p) => r(p).playmaking >= 82);
   let playmaking = avgPlaymaking + (hasEngine ? 10 : -12);
@@ -456,9 +491,9 @@ function chemistryForLineup(starters) {
   const offBalance = offensiveBalance(starters);
 
   // Pairwise roster-construction synergy: how the specific players fit together.
-  // Kept deliberately modest — fit shades chemistry, it doesn't dominate it.
+  // Cohesion is weighted heavily — a team is more than the sum of its parts.
   const syn = teamSynergy(starters);
-  const synAdj = clamp(syn.off, -14, 12) * 0.35 + clamp(syn.def, -8, 14) * 0.35;
+  const synAdj = clamp(syn.off, -18, 16) * 0.5 + clamp(syn.def, -10, 18) * 0.5;
 
   // A team cancer poisons the room more than the averages suggest.
   const worstCulture = Math.min(...starters.map((p) => c(p).culture));
@@ -569,7 +604,7 @@ function projectSeason(ctx, t) {
 
   const avgStarterValue = sum / ctx.filled;
   const strength =
-    (avgStarterValue * 0.85 + ctx.chemistry * 0.15 + ctx.elevateBoost) *
+    (avgStarterValue * 0.76 + ctx.chemistry * 0.24 + ctx.elevateBoost) *
     (0.6 + 0.4 * ctx.completeness);
   const wins = strengthToWins(strength);
 
@@ -612,8 +647,14 @@ function evaluateRoster(roster) {
   const avgPlayoffIndex = playoffSum / PROJECTION_YEARS;
   const pk = Math.round(peakWins);
   const championships = Math.round(titlesExpected);
+
+  // COHESION amplifier: a genuinely cohesive team is worth more than the sum of
+  // its parts, and a talented-but-disjointed one is worth less. This swings the
+  // final composite by roughly ±13%.
+  const cohesion = ctx.chemistry; // 0..100, completeness-scaled
+  const cohesionMult = 0.87 + (cohesion / 100) * 0.26;
   const composite =
-    avgWins * 0.55 + avgPlayoffIndex * 0.5 + titlesExpected * 4.5 + peakWins * 0.25;
+    (avgWins * 0.55 + avgPlayoffIndex * 0.5 + titlesExpected * 4.5 + peakWins * 0.25) * cohesionMult;
 
   return {
     avgWins,
@@ -621,6 +662,7 @@ function evaluateRoster(roster) {
     peakWins: pk,
     bestRecord: `${pk}-${82 - pk}`, // best single-season record at peak
     avgPlayoffIndex,
+    cohesion: Math.round(cohesion),
     titlesExpected, // expected value (fractional)
     championships, // rounded total titles over 15 years
     composite,
@@ -843,6 +885,8 @@ const SCORING = {
   dominance,
   valueAboveReplacement,
   playerTier,
+  salaryValue,
+  SALARY_CAP,
   seasonValue,
   availability,
   effectiveSeasonValue,
