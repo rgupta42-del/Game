@@ -195,6 +195,12 @@
         // Couldn't reach Firebase — degrade to the link-relay so the draft still works.
         console.error(e);
         ui.live = false;
+        alert(
+          "Couldn't reach the live database, so this draft fell back to the " +
+          "shareable-link relay. Check your Firebase Realtime Database rules " +
+          "(see FIREBASE_SETUP.md). The draft still works via the relay."
+        );
+        ui.mySeat = null;
         pushOnlineState();
         renderDraft();
       });
@@ -559,7 +565,7 @@
   }
 
   // ---- CPU autodraft -----------------------------------------------------
-  const CPU_DELAY_MS = 850; // brief pause so picks are watchable
+  const CPU_DELAY_MS = 500; // brief pause so picks are watchable, but snappy
 
   function scheduleCpuPick() {
     const m = game.currentManager();
@@ -744,9 +750,8 @@
 
       const photo = playerPhoto(p, ovr);
 
-      const salTag = ui.capMode
-        ? `<span class="tag salary${affordable ? "" : " unaffordable"}" title="Salary">$${salaryOf(p)}</span>`
-        : "";
+      // Salary value is always shown; in cap mode it also flags affordability.
+      const salTag = `<span class="tag salary${ui.capMode && !affordable ? " unaffordable" : ""}" title="Salary value (of a $${SALARY_CAP} team cap)">$${salaryOf(p)}</span>`;
       const meta = el("div", "player-meta");
       meta.innerHTML = `
         <div class="pname">${tierBadge(p)} ${p.name} ${injuryDot(p.injuryRisk)}</div>
