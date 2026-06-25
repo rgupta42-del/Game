@@ -37,6 +37,9 @@
     live: false, // true when using Firebase real-time sync
     roomId: null,
     mySeat: null, // which manager index this device controls (live mode)
+    isHost: false, // creator of a live room — drives CPU picks
+    roomReady: true, // (live) becomes true once the room exists
+    cpuFlags: [], // which seats are CPU-controlled
     staticBuilt: false,
     gameGen: 0, // generation counter so stale CPU timers can't fire into a new game
     pendingPlayer: null, // player awaiting slot assignment in the modal
@@ -104,7 +107,7 @@
       ui.mode = e.target.value;
       $("#mode-hint").textContent =
         ui.mode === "online"
-          ? "Each manager opens the link on their own device, makes their pick, then sends the updated link to the next manager. No CPUs."
+          ? "Each human manager joins on their own device; tick 🤖 for CPU seats (the host's device runs them automatically). Mix humans and CPUs freely."
           : "Everyone drafts on this device, taking turns. Tick 🤖 for CPU seats.";
       $("#start-draft").textContent = ui.mode === "online" ? "Start Online Draft" : "Start Draft";
       renderManagerNameInputs();
@@ -122,6 +125,7 @@
       n: game.managers.map((m) => m.name),
       p: game.pickLog.map((e) => [e.player.id, e.slot]),
       cfg: currentConfig(),
+      cpu: game.managers.map((m) => (m.isCpu ? 1 : 0)),
     };
     return b64urlEncode(JSON.stringify(state));
   }
@@ -138,14 +142,12 @@
     if (!m) return false;
     try {
       const state = JSON.parse(b64urlDecode(m[1]));
-      game = new DraftGame(state.n, { benchSize: 0 }); // online = all human
       ui.online = true;
       ui.mode = "online";
+      ui.cpuFlags = (state.cpu || []).map(Boolean);
       applyConfig(state.cfg);
-      (state.p || []).forEach(([id, slot]) => {
-        const p = PLAYER_POOL.find((x) => x.id === id);
-        if (p) game.draft(p, slot);
-      });
+      rebuildGameFrom(state.n, state.p || [], ui.cpuFlags);
+      initCpuProfiles(); // this device drives CPU picks while it holds the link
       return true;
     } catch (e) {
       return false;
@@ -158,8 +160,8 @@
     Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
   const seatKey = (roomId) => "nbaredraft_seat_" + roomId;
 
-  function rebuildGameFrom(names, picks) {
-    game = new DraftGame(names, { benchSize: 0 });
+  function rebuildGameFrom(names, picks, cpuFlags) {
+    game = new DraftGame(names, { benchSize: 0, cpuFlags: cpuFlags || ui.cpuFlags || [] });
     (picks || []).forEach((pk) => {
       // pk may be an array [id, slot] or a Firebase object {0:id, 1:slot}.
       const p = PLAYER_POOL.find((x) => x.id === pk[0]);
@@ -173,21 +175,26 @@
   }
 
   /** Host: create a live room, then choose a seat (any pick slot), start watching. */
-  function startLiveDraft(names) {
+  function startLiveDraft(names, cpuFlags) {
     ui.online = true;
     ui.live = true;
+    ui.isHost = true; // the host's device runs all CPU seats
+    ui.roomReady = false; // don't drive CPU picks until the room exists
     ui.roomId = randomRoomId();
-    ui.mySeat = null; // host chooses their seat just like everyone else (item #2)
+    ui.mySeat = null; // host chooses their (human) seat
+    ui.cpuFlags = cpuFlags || [];
     ui.gameGen++;
-    rebuildGameFrom(names, []);
+    rebuildGameFrom(names, [], ui.cpuFlags);
+    initCpuProfiles();
     buildDraftStaticUI();
     ui.staticBuilt = true;
     showScreen("#draft-screen");
     renderDraft();
-    FBSync.create(ui.roomId, { names, picks: [], seats: {}, cfg: currentConfig() })
+    FBSync.create(ui.roomId, { names, picks: [], seats: {}, cfg: currentConfig(), cpu: ui.cpuFlags.map((f) => (f ? 1 : 0)) })
       .then(() => {
+        ui.roomReady = true;
         history.replaceState(null, "", "#room=" + ui.roomId);
-        // Now that the room exists, the host chooses their seat (= their pick slot).
+        // Now that the room exists, the host chooses their (human) seat.
         showSeatModal(names, {});
         FBSync.watch(ui.roomId, onRoomUpdate);
       })
@@ -210,6 +217,7 @@
   function joinLiveRoom(roomId) {
     ui.online = true;
     ui.live = true;
+    ui.isHost = false; // joiners never drive CPU seats
     ui.roomId = roomId;
     const saved = localStorage.getItem(seatKey(roomId));
     ui.mySeat = saved != null ? parseInt(saved, 10) : null;
@@ -224,14 +232,15 @@
     let picks = data.picks || [];
     if (!Array.isArray(picks)) picks = Object.values(picks); // Firebase array quirk
     applyConfig(data.cfg);
+    if (Array.isArray(data.cpu)) ui.cpuFlags = data.cpu.map(Boolean);
     ui.gameGen++; // invalidate any pending timers
-    rebuildGameFrom(names, picks);
+    rebuildGameFrom(names, picks, ui.cpuFlags);
 
     if (!ui.staticBuilt) {
       buildDraftStaticUI();
       ui.staticBuilt = true;
     }
-    // First-time joiner picks which seat they are.
+    // First-time human joiner picks which (non-CPU) seat they are.
     if (ui.mySeat == null && names.length) {
       showSeatModal(names, data.seats || {});
     }
@@ -248,9 +257,11 @@
     wrap.innerHTML = "";
     const takenIdx = new Set(Object.keys(takenSeats || {}).map((k) => parseInt(k, 10)));
     names.forEach((nm, i) => {
+      const isCpuSeat = (ui.cpuFlags || [])[i];
       const taken = takenIdx.has(i) && String(i) !== localStorage.getItem(seatKey(ui.roomId));
-      const o = el("div", "so", `${nm}${taken ? " (taken)" : ""}`);
-      if (taken) o.style.opacity = "0.5";
+      const locked = isCpuSeat || taken;
+      const o = el("div", "so", `${nm}${isCpuSeat ? " 🤖" : taken ? " (taken)" : ""}`);
+      if (locked) o.style.opacity = "0.5";
       else
         o.onclick = () => {
           ui.mySeat = i;
@@ -295,19 +306,17 @@
       inp.value = prevName[i] || "";
       row.appendChild(inp);
 
-      // CPU seats only make sense in local mode.
-      if (ui.mode !== "online") {
-        const cpuLabel = el("label", "cpu-toggle");
-        const cb = el("input");
-        cb.type = "checkbox";
-        cb.checked = !!prevCpu[i];
-        cpuLabel.appendChild(cb);
-        cpuLabel.appendChild(el("span", null, "🤖 CPU controls this seat"));
-        cb.addEventListener("change", () => {
-          inp.placeholder = cb.checked ? `CPU ${i + 1}` : `Manager ${i + 1}`;
-        });
-        row.appendChild(cpuLabel);
-      }
+      // CPU seats are available in both local and online drafts.
+      const cpuLabel = el("label", "cpu-toggle");
+      const cb = el("input");
+      cb.type = "checkbox";
+      cb.checked = !!prevCpu[i];
+      cpuLabel.appendChild(cb);
+      cpuLabel.appendChild(el("span", null, "🤖 CPU controls this seat"));
+      cb.addEventListener("change", () => {
+        inp.placeholder = cb.checked ? `CPU ${i + 1}` : `Manager ${i + 1}`;
+      });
+      row.appendChild(cpuLabel);
 
       wrap.appendChild(row);
     }
@@ -337,15 +346,15 @@
     const eraErr = validateEraPool(names.length);
     if (eraErr) return alert(eraErr);
 
-    const cpuFlags = online
-      ? names.map(() => false)
-      : rows.map((r) => {
-          const cb = r.querySelector('input[type="checkbox"]');
-          return cb ? cb.checked : false;
-        });
+    // CPU flags from the per-seat toggles (available in local AND online).
+    const cpuFlags = rows.map((r) => {
+      const cb = r.querySelector('input[type="checkbox"]');
+      return cb ? cb.checked : false;
+    });
+    ui.cpuFlags = cpuFlags;
     // Live online draft via Firebase when configured; otherwise link-relay.
     if (online && liveAvailable()) {
-      startLiveDraft(names);
+      startLiveDraft(names, cpuFlags);
       return;
     }
 
@@ -486,12 +495,19 @@
   }
 
   // ---- Pick clock (item 1) -----------------------------------------------
+  // Whose device "owns" the clock for the current turn (shows it + auto-picks).
+  function ownsClock() {
+    const m = game.currentManager();
+    if (!m) return false;
+    if (m.isCpu) {
+      if (!ui.online) return false; // local CPUs are instant; no clock
+      return !ui.live || ui.isHost; // online: host runs CPU clocks
+    }
+    return !ui.live || myTurn(); // human: the on-clock seat's device
+  }
   function manageClock() {
     if (ui.clockSeconds <= 0 || game.isComplete) return;
-    const m = game.currentManager();
-    if (!m || m.isCpu) return; // CPUs use their own short delay
-    if (ui.live && !myTurn()) return; // only the on-clock seat's device counts down
-    startClock();
+    if (ownsClock()) startClock();
   }
   function startClock() {
     const gen = ui.gameGen;
@@ -505,6 +521,8 @@
       if (ui.clockRemaining <= 0) {
         clearInterval(ui.clockTimer);
         const cur = game.currentManager();
+        // CPU turns are handled by scheduleCpuPick; only auto-pick for a human
+        // who has let their clock expire.
         if (cur && !cur.isCpu) autoPick(cur);
       }
     }, 1000);
@@ -565,20 +583,28 @@
   }
 
   // ---- CPU autodraft -----------------------------------------------------
-  const CPU_DELAY_MS = 500; // brief pause so picks are watchable, but snappy
+  const CPU_DELAY_MS = 500; // local: snappy
 
   function scheduleCpuPick() {
+    if (game.isComplete) return;
     const m = game.currentManager();
     if (!m || !m.isCpu) return;
+    // In a live room only the host's device drives CPU seats (single writer),
+    // and only once the room actually exists; local/relay drive on this device.
+    if (ui.live && (!ui.isHost || !ui.roomReady)) return;
     closeModal(); // a CPU never uses the manual slot picker
-    const gen = ui.gameGen; // capture: ignore this timer if a new draft starts
+    const gen = ui.gameGen;
+    const atPick = game.pickLog.length; // guard against double-firing the same turn
+    // Online CPUs "think" a beat (with the clock visible); local CPUs are snappy.
+    const delay = ui.online ? 1600 + Math.random() * 1800 : CPU_DELAY_MS;
     setTimeout(() => {
       if (gen !== ui.gameGen || !game || game.isComplete) return;
+      if (game.pickLog.length !== atPick) return; // a pick already happened
       const cur = game.currentManager();
       if (!cur || !cur.isCpu) return;
       const choice = cpuChoose(cur);
       if (choice) commitPick(choice.player, choice.slot);
-    }, CPU_DELAY_MS);
+    }, delay);
   }
 
   /**
