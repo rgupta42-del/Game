@@ -489,8 +489,10 @@
     renderPlayerList();
     renderAllRosters();
 
-    // Hand the clock to the CPU if this seat is computer-controlled.
+    // Drive automated picks: local/relay CPUs here; live rooms (CPU + failover)
+    // via the resilient driver below.
     scheduleCpuPick();
+    scheduleLiveDrivers();
     manageClock();
   }
 
@@ -537,18 +539,24 @@
     $("#clock-time").textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
     $("#pick-clock").classList.toggle("warn", s <= 10);
   }
-  /** Time expired — auto-draft the best available pick for this manager. */
-  function autoPick(manager) {
+  /** Best available pick for a manager (used by clock auto-pick and failover). */
+  function bestAvailablePick(manager) {
     const avail = PLAYER_POOL.filter((p) => isDraftable(manager, p));
-    if (!avail.length) return;
+    if (!avail.length) return null;
     avail.sort(
       (a, b) =>
         careerRating(b) + 0.15 * bestFit(manager, b) - (careerRating(a) + 0.15 * bestFit(manager, a))
     );
     const best = avail[0];
     const ss = game.legalSlotsFor(manager, best).filter((s) => s !== "BENCH");
+    return { player: best, slot: ss.includes(best.pos) ? best.pos : ss[0] };
+  }
+  /** Time expired — auto-draft the best available pick for this manager. */
+  function autoPick(manager) {
+    const c = bestAvailablePick(manager);
+    if (!c) return;
     closeModal();
-    commitPick(best, ss.includes(best.pos) ? best.pos : ss[0]);
+    commitPick(c.player, c.slot);
   }
 
   /** The online banner: live room status (your turn / waiting) or relay link. */
@@ -586,24 +594,58 @@
   const CPU_DELAY_MS = 500; // local: snappy
 
   function scheduleCpuPick() {
-    if (game.isComplete) return;
+    if (ui.live || game.isComplete) return; // live handled by scheduleLiveDrivers
     const m = game.currentManager();
     if (!m || !m.isCpu) return;
-    // In a live room only the host's device drives CPU seats (single writer),
-    // and only once the room actually exists; local/relay drive on this device.
-    if (ui.live && (!ui.isHost || !ui.roomReady)) return;
     closeModal(); // a CPU never uses the manual slot picker
     const gen = ui.gameGen;
-    const atPick = game.pickLog.length; // guard against double-firing the same turn
-    // Online CPUs "think" a beat (with the clock visible); local CPUs are snappy.
+    const atPick = game.pickLog.length;
     const delay = ui.online ? 1600 + Math.random() * 1800 : CPU_DELAY_MS;
     setTimeout(() => {
       if (gen !== ui.gameGen || !game || game.isComplete) return;
-      if (game.pickLog.length !== atPick) return; // a pick already happened
+      if (game.pickLog.length !== atPick) return;
       const cur = game.currentManager();
       if (!cur || !cur.isCpu) return;
       const choice = cpuChoose(cur);
       if (choice) commitPick(choice.player, choice.slot);
+    }, delay);
+  }
+
+  /**
+   * Live-room driving with FAILOVER, so the draft survives anyone tabbing away
+   * (background tabs get throttled/frozen by the browser).
+   *   • CPU turn: the host drives it fast; every present, seated player is a
+   *     staggered backup that covers if the host's device is asleep.
+   *   • Human turn: that player's own device clock auto-picks at expiry; if THAT
+   *     device is frozen too, present backups cover ~6s after the clock would end.
+   * An atomic transaction guarantees only one pick ever commits (no doubles).
+   */
+  function scheduleLiveDrivers() {
+    if (!ui.live || !ui.roomReady || game.isComplete) return;
+    const m = game.currentManager();
+    if (!m) return;
+    const atPick = game.pickLog.length;
+    const myRoom = ui.roomId;
+    const seated = ui.mySeat != null;
+
+    let delay = null;
+    if (m.isCpu) {
+      if (ui.isHost) delay = 1600 + Math.random() * 1800; // primary
+      else if (seated) delay = 9000 + (ui.mySeat || 0) * 1500 + Math.random() * 1200; // backup
+    } else if (ui.clockSeconds > 0 && !myTurn() && (ui.isHost || seated)) {
+      // Backup only — the on-clock human's own device handles the normal expiry.
+      delay = (ui.clockSeconds + 6) * 1000 + (ui.mySeat || 0) * 1500 + Math.random() * 1200;
+    }
+    if (delay == null) return;
+
+    setTimeout(() => {
+      if (ui.roomId !== myRoom || !game || game.isComplete) return;
+      if (game.pickLog.length !== atPick) return; // someone already picked
+      const cur = game.currentManager();
+      if (!cur) return;
+      const choice = cur.isCpu ? cpuChoose(cur) : bestAvailablePick(cur);
+      if (!choice) return;
+      FBSync.appendPickIf(myRoom, atPick, [choice.player.id, choice.slot]);
     }, delay);
   }
 

@@ -67,6 +67,26 @@
       return this._ref(roomId).child("picks").set(picks);
     },
 
+    /**
+     * Atomically append one pick IFF the picks list is still `expectedLen` long.
+     * Lets any present client safely cover a CPU pick when the host is away —
+     * the transaction guarantees only one append commits (no double-picks).
+     * Returns a promise resolving to true if THIS client committed the pick.
+     */
+    appendPickIf(roomId, expectedLen, pick) {
+      if (!this._init()) return Promise.resolve(false);
+      const ref = this._ref(roomId).child("picks");
+      return ref
+        .transaction((cur) => {
+          const arr = cur == null ? [] : Array.isArray(cur) ? cur.slice() : Object.values(cur);
+          if (arr.length !== expectedLen) return; // abort: someone already picked
+          arr.push(pick);
+          return arr;
+        })
+        .then((res) => !!(res && res.committed))
+        .catch(() => false);
+    },
+
     /** Record that a seat has been claimed by a named player. */
     claimSeat(roomId, seatIndex, name) {
       if (!this._init()) return Promise.resolve();
