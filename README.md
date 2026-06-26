@@ -151,6 +151,14 @@ on-court fit with human factors:
   each other; two paint-bound bigs (Giannis + Embiid) clog the post on offense —
   yet those same twin rim protectors *wall off the paint* on defense. Creators
   paired with spacers, lob threats and shooters lift both ends.
+- **Roster construction (duplication risk & spacing-by-design)** — on top of the
+  pairwise term, the engine looks at the whole five. Two bigs who both live in the
+  post (Shaq + Giannis) overlap on offense and get flagged; three-plus rim
+  protectors (D.Robinson + Wembanyama + Rodman) is diminishing returns that
+  starves spacing, so the team's value is discounted. Conversely, a frontcourt hub
+  who can pass out of the post (Duncan, KAT, Jokić) surrounded by genuine kick-out
+  shooters (Reggie Miller + Ray Allen) is rewarded as **a sum greater than the
+  parts** — spacing earned through construction.
 - **Clutch** — proven late-game shot-makers add playoff value.
 - **Culture & coachability** — a potential team cancer poisons the room; great
   culture and system-fit lift it.
@@ -161,9 +169,11 @@ options (weighted toward the best), so the same human pick never yields the same
 CPU draft twice.
 
 The **results page** shows each team's clean position-by-position starting five
-(with usage tier and rating), a strengths-and-weaknesses summary, the notable
-teammate pairings (good and bad), and a 15-year win trajectory. Headline stats
-include **Total Championships won** and **Best Record at Peak** — a clutch,
+(with usage tier and rating), a strengths-and-weaknesses summary, the chemistry
+breakdown (duplication/spacing call-outs plus notable teammate pairings, good and
+bad), a plain-English **paragraph on the team's 15-year run** — the arc, the highs
+and lows, and what worked and what didn't — and a 15-year win trajectory. Headline
+stats include **Total Championships won** and **Best Record at Peak** — a clutch,
 playoff-built team can win more titles than its average record suggests, while a
 regular-season juggernaut may peak higher but close out fewer.
 

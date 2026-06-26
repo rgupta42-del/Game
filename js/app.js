@@ -1144,11 +1144,22 @@
           ? arr.map((t) => `<li class="${cls}">${cap(t)}</li>`).join("")
           : `<li class="muted">${empty}</li>`;
 
-      // Notable teammate pairings (roster construction).
-      const syn = SCORING.synergyNotes({ starters: m.starters, bench: [] });
-      const synHtml = syn.length
-        ? `<div class="res-subhead">Chemistry &amp; notable pairings</div>
-           <ul class="res-pairings">${syn.map((s) => `<li class="${s.kind}">${s.text}</li>`).join("")}</ul>`
+      // Notable teammate pairings + team-level construction (duplication /
+      // spacing) call-outs, shown together as the chemistry breakdown.
+      const rosterRef = { starters: m.starters, bench: [] };
+      const syn = SCORING.synergyNotes(rosterRef);
+      const cons = SCORING.constructionNotes(rosterRef);
+      const chemItems = cons.concat(syn);
+      const synHtml = chemItems.length
+        ? `<div class="res-subhead">Chemistry, spacing &amp; notable pairings</div>
+           <ul class="res-pairings">${chemItems.map((s) => `<li class="${s.kind}">${s.text}</li>`).join("")}</ul>`
+        : "";
+
+      // Prose recap of the 15-year run — highs, lows, what worked & didn't.
+      const narrative = SCORING.careerNarrative(rosterRef, ev);
+      const narrativeHtml = narrative
+        ? `<div class="res-subhead">The 15-year run</div>
+           <p class="res-narrative">${narrative}</p>`
         : "";
 
       const maxWins = 73;
@@ -1183,6 +1194,7 @@
           </div>
         </div>
         ${synHtml}
+        ${narrativeHtml}
         <div class="res-subhead">15-year win trajectory</div>
         <div class="timeline">${bars}</div>`;
       wrap.appendChild(team);

@@ -427,6 +427,152 @@ function synergyNotes(roster) {
 }
 
 // --------------------------------------------------------------------------
+//  Roster construction: duplication risk & spacing-by-design
+// --------------------------------------------------------------------------
+
+/**
+ * Team-level construction analysis that sits on top of pairwise synergy:
+ *   • POST LOGJAM — two-plus bigs who both live in the post/paint on offense
+ *     (Shaq + Giannis) fight for the same real estate, and the floor shrinks.
+ *   • RIM-PROTECTOR REDUNDANCY — three-plus shot-blocking bigs (D.Robinson +
+ *     Wembanyama + Rodman) is diminishing returns on defense and usually starves
+ *     the offense of spacing, so the overall value is discounted.
+ *   • SPACING BY DESIGN — a frontcourt focal point who can pass out of the post
+ *     (Duncan, KAT, Jokic) surrounded by genuine kick-out shooters (Reggie
+ *     Miller + Ray Allen) is a sum greater than the parts.
+ * Returns { delta, postBound, rimProt, shooters, hubs }: delta folds into the
+ * lineup's chemistry, and the arrays feed the plain-English call-outs.
+ */
+function constructionMetrics(starters) {
+  const r = (p) => p.ratings;
+  const isBig = (p) => p.eligible.includes("C") || p.eligible.includes("PF");
+
+  // Bigs who must operate out of the post/paint to score (offensive footprint).
+  const postBound = starters.filter((p) => (ext(p).interiorLoad || 0) >= 74);
+  // Rim-protecting bigs — anchors who wall off the basket.
+  const rimProt = starters.filter((p) => (ext(p).blocks || 0) >= 80 || r(p).interiorD >= 82);
+  // Genuine floor-spacing, kick-out shooters (not just passable from deep).
+  const shooters = starters.filter((p) => r(p).shooting >= 82);
+  // A frontcourt focal point who commands the paint AND can pass out of it — the
+  // hub that turns kick-out shooting into a sum greater than the parts.
+  const hubs = starters.filter(
+    (p) => isBig(p) && r(p).playmaking >= 60 && r(p).iq >= 76 &&
+           (r(p).scoring >= 80 || (ext(p).interiorLoad || 0) >= 60)
+  );
+  const kickOut = shooters.filter((p) => hubs.indexOf(p) === -1);
+
+  let delta = 0;
+  // (a) Overlapping post footprints clog the lower block.
+  if (postBound.length >= 2) delta -= (postBound.length - 1) * 6;
+  // (b) Three-plus rim protectors: diminishing returns + lost spacing.
+  if (rimProt.length >= 3) delta -= (rimProt.length - 2) * 9;
+  // (c) Spacing by design: a post hub + two-plus off-hub kick-out shooters.
+  if (hubs.length >= 1 && kickOut.length >= 2) delta += 6 + Math.min(kickOut.length - 2, 2) * 3;
+
+  return { delta, postBound, rimProt, shooters, hubs, kickOut };
+}
+
+/**
+ * Plain-English call-outs about roster construction for the results page:
+ * duplication risk (a post logjam, redundant rim protection) and spacing earned
+ * through construction (a post hub feeding kick-out shooters). Returns an array
+ * of { kind: "good"|"bad", text }.
+ */
+function constructionNotes(roster) {
+  const starters = starterPlayers(roster);
+  const notes = [];
+  if (starters.length < 2) return notes;
+  const m = constructionMetrics(starters);
+  const list = (arr) => {
+    const n = arr.map((p) => p.name);
+    if (n.length === 1) return n[0];
+    if (n.length === 2) return `${n[0]} and ${n[1]}`;
+    return `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
+  };
+
+  if (m.postBound.length >= 2) {
+    const verb = m.postBound.length === 2 ? "both need" : "all need";
+    notes.push({
+      kind: "bad",
+      text: `🏗️ ${list(m.postBound)} ${verb} the post/paint on offense — overlapping real estate cramps the lower block and shrinks the floor.`,
+    });
+  }
+  if (m.rimProt.length >= 3) {
+    notes.push({
+      kind: "bad",
+      text: `🧱 ${list(m.rimProt)} are all rim-protecting bigs — diminishing defensive returns, and stacking them this deep starves your spacing, so the team's value is discounted.`,
+    });
+  }
+  if (m.hubs.length >= 1 && m.kickOut.length >= 2) {
+    const hub = m.hubs.slice().sort((a, b) => careerRating(b) - careerRating(a))[0];
+    const topShooters = m.kickOut.slice().sort((a, b) => b.ratings.shooting - a.ratings.shooting);
+    notes.push({
+      kind: "good",
+      text: `🎯 ${hub.name} drawing the defense and kicking out to shooters like ${list(topShooters.slice(0, 2))} is spacing by design — a sum greater than the parts.`,
+    });
+  }
+  return notes;
+}
+
+/**
+ * A short prose paragraph about the team's 15-year run — the arc, the highs and
+ * lows, and what worked and what didn't — for the results page. `ev` is an
+ * optional pre-computed evaluateRoster() result.
+ */
+function careerNarrative(roster, ev) {
+  const starters = starterPlayers(roster);
+  if (starters.length === 0) return "";
+  ev = ev || evaluateRoster(roster);
+  const seasons = ev.seasons || [];
+  if (!seasons.length) return "";
+
+  const span = (a, b) => {
+    const sl = seasons.slice(a, b);
+    return sl.reduce((s, x) => s + x.wins, 0) / (sl.length || 1);
+  };
+  const early = span(0, 3), prime = span(3, 9), late = span(11, 15);
+  let peakYr = 0, peakW = 0;
+  seasons.forEach((s, i) => { if (s.wins > peakW) { peakW = s.wins; peakYr = i; } });
+  const rec = (w) => `${Math.round(w)}-${82 - Math.round(w)}`;
+
+  const best = starters.slice().sort((a, b) => careerRating(b) - careerRating(a))[0];
+  const tierLabel = playerTier(best).label;
+  const article = /^[aeiou]/i.test(tierLabel) ? "an" : "a";
+  const { strengths, weaknesses } = teamStrengthsWeaknesses(roster);
+  const cons = constructionNotes(roster);
+
+  let p = `Built around ${best.name}, ${article} ${tierLabel}, this team `;
+  p += early >= 48
+    ? `hit the ground running at roughly a ${rec(early)} pace`
+    : `needed a few seasons to gel, opening around ${rec(early)}`;
+  p += `, then peaked in year ${peakYr + 1} at ${rec(peakW)}`;
+  if (ev.championships >= 1) {
+    p += ` and converted that ceiling into about ${ev.championships} championship${ev.championships === 1 ? "" : "s"} over the run`;
+  } else if (ev.avgPlayoffIndex >= 55) {
+    p += `, going on deep playoff runs but never quite breaking through for a title`;
+  } else {
+    p += `, but the postseason results never matched the regular-season form`;
+  }
+  p += late >= prime - 4
+    ? `. The group aged well, still good for ~${Math.round(late)} wins in the twilight years.`
+    : `. Age took its toll late, the win total sliding to ~${Math.round(late)} by the final seasons.`;
+
+  if (strengths.length) p += ` What worked was the ${strengths.slice(0, 3).join(", ")}.`;
+
+  const flaws = weaknesses.slice(0, 2);
+  const consBad = cons.filter((c) => c.kind === "bad").length;
+  if (flaws.length || consBad) {
+    const bits = flaws.slice();
+    if (consBad) bits.push(`overlapping roster construction (${consBad} duplication flag${consBad === 1 ? "" : "s"})`);
+    p += ` What held them back: ${bits.join(", ")}.`;
+  }
+  if (cons.some((c) => c.kind === "good")) {
+    p += ` Crucially, the spacing was engineered rather than accidental — shooting and post-passing that fit together for more than the sum of the parts.`;
+  }
+  return p;
+}
+
+// --------------------------------------------------------------------------
 //  Team fit / chemistry
 // --------------------------------------------------------------------------
 
@@ -499,7 +645,13 @@ function chemistryForLineup(starters) {
   const worstCulture = Math.min(...starters.map((p) => c(p).culture));
   const cancerPenalty = worstCulture < 45 ? (45 - worstCulture) * 0.4 : 0;
 
-  const chem = skillChem * 0.55 + humanChem * 0.25 + offBalance * 0.12 + 8 + synAdj - cancerPenalty;
+  // Roster construction: duplication risk (overlapping post / stacked rim
+  // protection) is penalized, spacing-by-design (a post hub feeding kick-out
+  // shooters) is rewarded — a structural adjustment beyond raw pair synergy.
+  const constrDelta = constructionMetrics(starters).delta;
+
+  const chem =
+    skillChem * 0.55 + humanChem * 0.25 + offBalance * 0.12 + 8 + synAdj + constrDelta - cancerPenalty;
   return clamp(chem, 0, 100);
 }
 
@@ -902,6 +1054,9 @@ const SCORING = {
   pairSynergy,
   teamSynergy,
   synergyNotes,
+  constructionMetrics,
+  constructionNotes,
+  careerNarrative,
   rosterPlayers,
   starterPlayers,
   // Back-compat alias: the UI's "overall" badge now shows the career rating.
