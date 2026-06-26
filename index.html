@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=16" />
+  <link rel="stylesheet" href="styles.css?v=17" />
 </head>
 <body>
   <header class="topbar">
@@ -69,10 +69,27 @@
         </div>
 
         <div class="field">
+          <label for="posmode-select">Position rules</label>
+          <select id="posmode-select">
+            <option value="locked" selected>Locked — you assign each pick to a fixed open slot</option>
+            <option value="flexible">Flexible — draft freely; the lineup re-arranges (PG↔SG↔SF↔PF↔C) as long as a legal five remains</option>
+          </select>
+          <span class="hint">Flexible lets you take a second SG if he (or your current SG) can slide to an open, adjustable slot.</span>
+        </div>
+
+        <div class="field">
           <label class="cap-toggle">
             <input type="checkbox" id="cap-toggle" />
             <span>💰 Salary-cap mode — each team has a $200 cap (stars cost more, so you can't stack a Tier-1A roster)</span>
           </label>
+        </div>
+
+        <div class="field">
+          <label class="cap-toggle">
+            <input type="checkbox" id="coach-toggle" />
+            <span>🧠 Draft a head coach — adds a coach round (top 30 coaches since the ’80s). In cap mode the cap rises to $250 and the coach costs salary too.</span>
+          </label>
+          <span class="hint">A great coach who fits your style (defensive coach + defensive team, run-and-gun + a fast team) lifts your cohesion; a mismatch doesn't.</span>
         </div>
 
         <p class="hint">Each manager drafts a starting five — PG, SG, SF, PF and C. No bench.</p>
@@ -85,13 +102,19 @@
 
     <!-- ============================== DRAFT SCREEN ============================== -->
     <section id="draft-screen" class="screen">
+      <!-- Sticky mini-bar: always-visible on-clock + pick clock (esp. on mobile). -->
+      <div id="draft-sticky" class="draft-sticky">
+        <span class="sticky-label">🏀 On the clock</span>
+        <span id="sticky-onclock" class="sticky-onclock">—</span>
+        <div id="pick-clock" class="pick-clock hidden"><span id="clock-time">1:00</span></div>
+      </div>
+
       <div class="draft-status">
         <div class="onclock">
           <span class="label">On the clock</span>
           <span id="onclock-name" class="onclock-name">—</span>
           <span id="onclock-meta" class="onclock-meta"></span>
         </div>
-        <div id="pick-clock" class="pick-clock hidden"><span id="clock-time">1:00</span></div>
         <div class="upcoming">
           <span class="label">Upcoming</span>
           <div id="upcoming-list" class="upcoming-list"></div>
@@ -178,6 +201,15 @@
     </div>
   </div>
 
+  <!-- Turn gate (online): clock doesn't start until you hit Go. -->
+  <div id="turn-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>🟢 It's your turn!</h3>
+      <p class="muted" id="turn-modal-sub">Your pick clock starts when you hit <b>Go</b>. Take your time getting here — the clock won't run until you're ready.</p>
+      <button id="turn-go" class="btn primary big">Go — start my clock ▶</button>
+    </div>
+  </div>
+
   <!-- Seat-claim modal (live online drafts) -->
   <div id="seat-modal" class="modal hidden">
     <div class="modal-card">
@@ -190,12 +222,13 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=16"></script>
-  <script src="js/firebase-sync.js?v=16"></script>
+  <script src="js/firebase-config.js?v=17"></script>
+  <script src="js/firebase-sync.js?v=17"></script>
 
-  <script src="js/players.js?v=16"></script>
-  <script src="js/scoring.js?v=16"></script>
-  <script src="js/draft.js?v=16"></script>
-  <script src="js/app.js?v=16"></script>
+  <script src="js/players.js?v=17"></script>
+  <script src="js/coaches.js?v=17"></script>
+  <script src="js/scoring.js?v=17"></script>
+  <script src="js/draft.js?v=17"></script>
+  <script src="js/app.js?v=17"></script>
 </body>
 </html>

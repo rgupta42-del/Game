@@ -247,8 +247,16 @@ function playerTier(player) {
  * fit one or two stars around role players, but never a whole Tier-1A team.
  */
 const SALARY_CAP = 200;
+const SALARY_CAP_WITH_COACH = 250;
 function salaryValue(player) {
   const r = careerRating(player);
+  return Math.max(2, Math.round(Math.pow(Math.max(0, r - 55), 1.7) * 0.116));
+}
+
+/** Salary for a head coach — same convex curve on the coach's overall, so the
+ *  best coach (Phil Jackson) costs about as much as a top-tier player. */
+function coachSalary(coach) {
+  const r = coach.overall || 70;
   return Math.max(2, Math.round(Math.pow(Math.max(0, r - 55), 1.7) * 0.116));
 }
 
@@ -569,7 +577,86 @@ function careerNarrative(roster, ev) {
   if (cons.some((c) => c.kind === "good")) {
     p += ` Crucially, the spacing was engineered rather than accidental — shooting and post-passing that fit together for more than the sum of the parts.`;
   }
+  if (roster.coach) {
+    const { note } = coachAdjust(starters, roster.coach);
+    p += ` On the sideline, ${roster.coach.name} ${note}.`;
+  }
   return p;
+}
+
+// --------------------------------------------------------------------------
+//  Head coach: maximizing talent + style fit
+// --------------------------------------------------------------------------
+
+/** A lineup's identity on the axes a coach cares about (each ~50..90). */
+function teamIdentity(starters) {
+  const r = (p) => p.ratings;
+  const c = (p) => p.career;
+  const n = starters.length || 1;
+  const avg = (sel) => starters.reduce((s, p) => s + sel(p), 0) / n;
+  // Defense rewards a player's stronger side (rim OR perimeter) so genuine
+  // specialists read as the elite defenders they are rather than getting
+  // averaged down by their weak end.
+  const defense = avg((p) =>
+    (Math.max(r(p).perimeterD, ext(p).steals || 0) + Math.max(r(p).interiorD, ext(p).blocks || 0)) / 2
+  );
+  // Pace leans on athleticism + spacing, and is dragged down by paint-bound bigs.
+  const pace = avg((p) => r(p).athleticism * 0.45 + r(p).shooting * 0.3 + (100 - (ext(p).interiorLoad || 40)) * 0.25);
+  const offense = avg((p) => r(p).shooting * 0.38 + r(p).playmaking * 0.30 + r(p).scoring * 0.32);
+  const coachability = avg((p) => c(p).coachability);
+  const worstCulture = Math.min(...starters.map((p) => c(p).culture));
+  return { defense, pace, offense, coachability, worstCulture };
+}
+
+/**
+ * How a head coach changes a roster's chemistry. Returns { delta, note }.
+ *   • A better coach lifts everyone a little.
+ *   • DEVELOPMENT × COACHABILITY — a coach who maximizes talent does more with a
+ *     coachable group.
+ *   • STYLE FIT — a coach's strongest trait aligned with the team's identity is a
+ *     real boost (defensive coach + defensive team, run-and-gun + fast team);
+ *     misaligned, it's a slight drag.
+ *   • A culture coach steadies a shaky locker room.
+ */
+function coachAdjust(starters, coach) {
+  if (!coach || !starters.length) return { delta: 0, note: "" };
+  const t = coach.traits || {};
+  const id = teamIdentity(starters);
+
+  // Aligned when the coach is strong on an axis AND the team is built for it.
+  const fit = (trait, team, base) => clamp(((trait || 70) - 75) / 22, -1, 1) * clamp((team - base) / 15, -1.2, 1.5);
+  const styleDelta =
+    fit(t.def, id.defense, 68) * 6.5 +
+    fit(t.pace, id.pace, 70) * 4.5 +
+    fit(t.off, id.offense, 72) * 4.5;
+
+  const base = ((coach.overall || 80) - 80) * 0.12;
+  const development = ((t.dev || 70) - 72) * 0.05 * (0.6 + (id.coachability - 70) * 0.02);
+  const cultureLift = id.worstCulture < 55 ? clamp(((t.culture || 70) - 72) * 0.06, 0, 4) * ((55 - id.worstCulture) / 20) : 0;
+
+  const delta = clamp(base + development + styleDelta + cultureLift, -7, 15);
+
+  // A short note describing the dominant effect.
+  let note;
+  const best = [["def", id.defense, 68, "defense"], ["pace", id.pace, 70, "pace/transition"], ["off", id.offense, 72, "offense"]]
+    .map(([k, team, b, label]) => ({ k, label, v: fit(t[k], team, b) }))
+    .sort((a, b) => b.v - a.v)[0];
+  if (best.v >= 0.35) note = `maximizes this roster's ${best.label}`;
+  else if (best.v <= -0.35) note = `is a stylistic mismatch (${best.label} doesn't fit)`;
+  else if (cultureLift > 1) note = "steadies a shaky locker room";
+  else note = (coach.overall || 80) >= 88 ? "elite bench boss who lifts the whole group" : "a steady hand on the sideline";
+
+  return { delta, note };
+}
+
+/** Plain-English note about the head coach for the results page (or "" if none). */
+function coachNote(roster) {
+  const coach = roster && roster.coach;
+  if (!coach) return "";
+  const starters = starterPlayers(roster);
+  if (!starters.length) return "";
+  const { note } = coachAdjust(starters, coach);
+  return `🧠 Coached by ${coach.name} (${coach.style}) — ${note}.`;
 }
 
 // --------------------------------------------------------------------------
@@ -579,10 +666,10 @@ function careerNarrative(roster, ev) {
 /**
  * Chemistry score (0..100) for a lineup — how the pieces fit, blending on-court
  * fit (spacing, playmaking, defense, rebounding, shot hierarchy) with the human
- * factors (elevators, culture, coachability) and an alpha-clash penalty when too
- * many ball-dominant stars need the same touches.
+ * factors (elevators, culture, coachability), an alpha-clash penalty when too
+ * many ball-dominant stars need the same touches, and the head coach's impact.
  */
-function chemistryForLineup(starters) {
+function chemistryForLineup(starters, coach) {
   if (starters.length === 0) return 0;
   const r = (p) => p.ratings;
   const c = (p) => p.career;
@@ -650,8 +737,11 @@ function chemistryForLineup(starters) {
   // shooters) is rewarded — a structural adjustment beyond raw pair synergy.
   const constrDelta = constructionMetrics(starters).delta;
 
+  // Head coach: maximizes (or misfits) the roster's talent and identity.
+  const coachDelta = coach ? coachAdjust(starters, coach).delta : 0;
+
   const chem =
-    skillChem * 0.55 + humanChem * 0.25 + offBalance * 0.12 + 8 + synAdj + constrDelta - cancerPenalty;
+    skillChem * 0.55 + humanChem * 0.25 + offBalance * 0.12 + 8 + synAdj + constrDelta + coachDelta - cancerPenalty;
   return clamp(chem, 0, 100);
 }
 
@@ -720,7 +810,7 @@ function rosterContext(roster) {
   // Lineup construction (who's at which slot) folds into chemistry, so each
   // roster's fit — and thus its composite — is unique to its position assignment.
   const construction = lineupConstruction(roster);
-  const chemistry = clamp(chemistryForLineup(starters) + construction, 0, 100) * (0.6 + 0.4 * completeness);
+  const chemistry = clamp(chemistryForLineup(starters, roster.coach) + construction, 0, 100) * (0.6 + 0.4 * completeness);
   const avgElevates = starters.reduce((s, p) => s + p.career.elevates, 0) / filled;
   const avgWinning = starters.reduce((s, p) => s + p.career.winning, 0) / filled;
   const avgClutch = starters.reduce((s, p) => s + (ext(p).clutch != null ? ext(p).clutch : 70), 0) / filled;
@@ -1038,7 +1128,12 @@ const SCORING = {
   valueAboveReplacement,
   playerTier,
   salaryValue,
+  coachSalary,
+  coachAdjust,
+  coachNote,
+  teamIdentity,
   SALARY_CAP,
+  SALARY_CAP_WITH_COACH,
   seasonValue,
   availability,
   effectiveSeasonValue,

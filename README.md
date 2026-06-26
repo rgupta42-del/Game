@@ -40,13 +40,28 @@ No install, no backend, no internet required. Just open the page.
 ### Setup options
 
 - **Pick clock** — off, 0:30, 0:45, 1:00 (default), 1:30 or 2:00. When it hits
-  zero the best available player is auto-drafted.
+  zero the best available player is auto-drafted. In **online** drafts the clock
+  doesn't start until you tap **Go** on the "It's your turn!" prompt, so a manager
+  who isn't at their device the second their turn comes up isn't disadvantaged.
+  The clock also rides in a **sticky header** so it's always in view on mobile.
+- **Position rules** — **Locked** (you assign each pick to a fixed open slot) or
+  **Flexible** (draft freely; the lineup automatically re-arranges across
+  PG↔SG↔SF↔PF↔C as long as a legal starting five remains, so you can take a second
+  SG if he — or your current SG — can slide to an open, adjustable slot).
 - **Eras to include** — limit the player pool to any mix of decades (80s / 90s /
   00s / 10s / 20s). Only players who starred in a checked decade are draftable.
-- **Salary-cap mode** — each team gets a **$200 cap**. Every player has a salary
-  derived from their rating on a steep curve, so a franchise star eats a huge
-  chunk and you can't stack a whole Tier-1A roster — you build a star or two
-  around value pieces.
+- **Salary-cap mode** — each team gets a **$200 cap** (**$250** with coaches).
+  Every player has a salary derived from their rating on a steep curve, so a
+  franchise star eats a huge chunk and you can't stack a whole Tier-1A roster.
+  The **draft board shows each pick's salary and each team's running total**, so
+  you can see where the money went in real time.
+- **Draft a head coach** — adds a final **coach round** with the **top 30 coaches
+  since the ’80s** (Phil Jackson tops the scale at a Jokić-level price, tiering
+  down). A coach lifts your **cohesion** by developing a coachable group and by
+  **style fit**: a defensive coach (Thibodeau, Van Gundy) elevates a defensive
+  roster, a run-and-gun coach (D'Antoni, Nellie) elevates a fast, spacing roster,
+  a culture coach steadies a shaky locker room — and a stylistic mismatch doesn't
+  help. In cap mode the coach costs salary too.
 - **Online seat choice** — the manager who creates a live room now picks *which*
   seat (and therefore which draft slot) they want, rather than being forced to
   pick first.
