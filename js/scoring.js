@@ -666,10 +666,16 @@ function coachNote(roster) {
 /**
  * Chemistry score (0..100) for a lineup — how the pieces fit, blending on-court
  * fit (spacing, playmaking, defense, rebounding, shot hierarchy) with the human
- * factors (elevators, culture, coachability), an alpha-clash penalty when too
- * many ball-dominant stars need the same touches, and the head coach's impact.
+ * factors (elevators, culture, coachability) and an alpha-clash penalty when too
+ * many ball-dominant stars need the same touches.
+ *
+ * NOTE: roster-construction (duplication/spacing) and the head coach are applied
+ * SEPARATELY as a post-clamp multiplier on the composite (see evaluateRoster) —
+ * folding them in here would be swallowed by the 0..100 clamp for any star team,
+ * so they wouldn't actually change who wins. They ARE reflected in the displayed
+ * cohesion number.
  */
-function chemistryForLineup(starters, coach) {
+function chemistryForLineup(starters) {
   if (starters.length === 0) return 0;
   const r = (p) => p.ratings;
   const c = (p) => p.career;
@@ -732,17 +738,25 @@ function chemistryForLineup(starters, coach) {
   const worstCulture = Math.min(...starters.map((p) => c(p).culture));
   const cancerPenalty = worstCulture < 45 ? (45 - worstCulture) * 0.4 : 0;
 
-  // Roster construction: duplication risk (overlapping post / stacked rim
-  // protection) is penalized, spacing-by-design (a post hub feeding kick-out
-  // shooters) is rewarded — a structural adjustment beyond raw pair synergy.
-  const constrDelta = constructionMetrics(starters).delta;
-
-  // Head coach: maximizes (or misfits) the roster's talent and identity.
-  const coachDelta = coach ? coachAdjust(starters, coach).delta : 0;
-
   const chem =
-    skillChem * 0.55 + humanChem * 0.25 + offBalance * 0.12 + 8 + synAdj + constrDelta + coachDelta - cancerPenalty;
+    skillChem * 0.55 + humanChem * 0.25 + offBalance * 0.12 + 8 + synAdj - cancerPenalty;
   return clamp(chem, 0, 100);
+}
+
+/**
+ * Team-fit delta (un-clamped) for a roster: roster-construction duplication/
+ * spacing PLUS the head coach. This is applied as a multiplier on the final
+ * composite so it genuinely changes who wins — duplication "discounts the
+ * overall value", spacing-by-design is "a sum greater than the parts", and a
+ * coach who fits (or clashes with) the roster's identity moves the needle even
+ * for star teams whose raw chemistry is already maxed out.
+ */
+function teamFitDelta(roster) {
+  const starters = starterPlayers(roster);
+  if (!starters.length) return 0;
+  const constrDelta = constructionMetrics(starters).delta;
+  const coachDelta = roster.coach ? coachAdjust(starters, roster.coach).delta : 0;
+  return constrDelta + coachDelta;
 }
 
 // --------------------------------------------------------------------------
@@ -804,13 +818,16 @@ function rosterContext(roster) {
 
   if (filled === 0) {
     return { starters, posMult, bench, filled, completeness, chemistry: 0, construction: 0,
-      elevateBoost: 0, avgWinning: 0, avgClutch: 0, alphaBoost: 0 };
+      fitDelta: 0, elevateBoost: 0, avgWinning: 0, avgClutch: 0, alphaBoost: 0 };
   }
 
   // Lineup construction (who's at which slot) folds into chemistry, so each
   // roster's fit — and thus its composite — is unique to its position assignment.
   const construction = lineupConstruction(roster);
-  const chemistry = clamp(chemistryForLineup(starters, roster.coach) + construction, 0, 100) * (0.6 + 0.4 * completeness);
+  const chemistry = clamp(chemistryForLineup(starters) + construction, 0, 100) * (0.6 + 0.4 * completeness);
+  // Duplication/spacing + head coach, scaled by how full the roster is. Applied
+  // as a post-clamp composite multiplier so it survives chemistry saturation.
+  const fitDelta = teamFitDelta(roster) * completeness;
   const avgElevates = starters.reduce((s, p) => s + p.career.elevates, 0) / filled;
   const avgWinning = starters.reduce((s, p) => s + p.career.winning, 0) / filled;
   const avgClutch = starters.reduce((s, p) => s + (ext(p).clutch != null ? ext(p).clutch : 70), 0) / filled;
@@ -819,7 +836,7 @@ function rosterContext(roster) {
   const alphaBoost = Math.max(0, maxDom - 86) * 0.25;
 
   return {
-    starters, posMult, bench, filled, completeness, chemistry, construction,
+    starters, posMult, bench, filled, completeness, chemistry, construction, fitDelta,
     elevateBoost: (avgElevates - 70) * 0.06, avgWinning, avgClutch, alphaBoost,
   };
 }
@@ -895,8 +912,18 @@ function evaluateRoster(roster) {
   // final composite by roughly ±13%.
   const cohesion = ctx.chemistry; // 0..100, completeness-scaled
   const cohesionMult = 0.87 + (cohesion / 100) * 0.26;
+  // Construction (duplication/spacing) + head coach as a post-clamp multiplier so
+  // they ACTUALLY change who wins: roughly -11% (e.g. three rim protectors) to
+  // +6% (spacing engineered by design / a coach who fits), even for star teams
+  // whose raw chemistry is already pinned at 100.
+  const fitMult = clamp(1 + ctx.fitDelta * 0.006, 0.88, 1.10);
   const composite =
-    (avgWins * 0.55 + avgPlayoffIndex * 0.5 + titlesExpected * 4.5 + peakWins * 0.25) * cohesionMult;
+    (avgWins * 0.55 + avgPlayoffIndex * 0.5 + titlesExpected * 4.5 + peakWins * 0.25) * cohesionMult * fitMult;
+
+  // The displayed cohesion reflects the construction/coach shaping too, so the
+  // number on the card lines up with the call-outs (a 3-rim-protector team reads
+  // visibly lower).
+  const displayCohesion = Math.round(clamp(cohesion + ctx.fitDelta, 0, 100));
 
   return {
     avgWins,
@@ -904,7 +931,7 @@ function evaluateRoster(roster) {
     peakWins: pk,
     bestRecord: `${pk}-${82 - pk}`, // best single-season record at peak
     avgPlayoffIndex,
-    cohesion: Math.round(cohesion),
+    cohesion: displayCohesion,
     titlesExpected, // expected value (fractional)
     championships, // rounded total titles over 15 years
     composite,
@@ -1084,6 +1111,19 @@ function teamStrengthsWeaknesses(roster) {
   else if (syn.off >= 8) strengths.push("complementary offensive fits");
   if (syn.def >= 10) strengths.push("layered, complementary defense");
 
+  // Construction (duplication / spacing) — keep this consistent with the
+  // call-outs: a roster with stacked bigs shouldn't also claim "floor spacing".
+  const cm = constructionMetrics(s);
+  if (cm.rimProt.length >= 3 || cm.postBound.length >= 2) {
+    const fs = strengths.indexOf("floor spacing");
+    if (fs >= 0) strengths.splice(fs, 1);
+    if (cm.rimProt.length >= 3) weaknesses.push("cramped spacing (too many non-shooting bigs)");
+    else if (!weaknesses.includes("cramped spacing (too many non-shooting bigs)")) weaknesses.push("overlapping post real estate");
+  }
+  if (cm.hubs.length >= 1 && cm.kickOut.length >= 2 && !strengths.includes("floor spacing")) {
+    strengths.push("spacing engineered by design");
+  }
+
   // Durability / aging / intangibles.
   const avgInjury = avg((p) => p.injuryRisk);
   if (avgInjury <= 30) strengths.push("durable, low-injury core");
@@ -1152,6 +1192,7 @@ const SCORING = {
   constructionMetrics,
   constructionNotes,
   careerNarrative,
+  teamFitDelta,
   rosterPlayers,
   starterPlayers,
   // Back-compat alias: the UI's "overall" badge now shows the career rating.
