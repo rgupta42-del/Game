@@ -44,24 +44,35 @@ No install, no backend, no internet required. Just open the page.
   doesn't start until you tap **Go** on the "It's your turn!" prompt, so a manager
   who isn't at their device the second their turn comes up isn't disadvantaged.
   The clock also rides in a **sticky header** so it's always in view on mobile.
+- **Draft order** — **Snake** (1·2·3·4 then 4·3·2·1, default), **Linear**
+  (1·2·3·4 every round), or **Random** (a fresh random pick order each round so no
+  seat has a built-in advantage). Random orders are persisted so online/shared
+  links replay the exact same sequence for everyone.
 - **Position rules** — **Locked** (you assign each pick to a fixed open slot) or
   **Flexible** (draft freely; the lineup automatically re-arranges across
   PG↔SG↔SF↔PF↔C as long as a legal starting five remains, so you can take a second
   SG if he — or your current SG — can slide to an open, adjustable slot).
 - **Eras to include** — limit the player pool to any mix of decades (80s / 90s /
   00s / 10s / 20s). Only players who starred in a checked decade are draftable.
-- **Salary-cap mode** — each team gets a **$200 cap** (**$250** with coaches).
-  Every player has a salary derived from their rating on a steep curve, so a
-  franchise star eats a huge chunk and you can't stack a whole Tier-1A roster.
-  The **draft board shows each pick's salary and each team's running total**, so
-  you can see where the money went in real time.
-- **Draft a head coach** — adds a final **coach round** with the **top 30 coaches
-  since the ’80s** (Phil Jackson tops the scale at a Jokić-level price, tiering
-  down). A coach lifts your **cohesion** by developing a coachable group and by
-  **style fit**: a defensive coach (Thibodeau, Van Gundy) elevates a defensive
-  roster, a run-and-gun coach (D'Antoni, Nellie) elevates a fast, spacing roster,
-  a culture coach steadies a shaky locker room — and a stylistic mismatch doesn't
-  help. In cap mode the coach costs salary too.
+- **Salary-cap mode** — every player (and coach) has a salary on a steep curve, so
+  a franchise star eats a huge chunk and you can't stack a whole Tier-1A roster.
+  The **cap is selectable** (**$150 / $175 / $200 / $225 / $250**), defaulting to
+  **$200** (or **$250** with a coach). The **draft board shows each pick's salary
+  and each team's running total**, so you can see where the money went in real time.
+- **Draft a head coach** — each team also drafts one of the **top 30 coaches since
+  the ’80s** (Phil Jackson tops the scale at a Jokić-level price, tiering down),
+  **hireable at any point in the draft like a sixth position** (filter to 🧠 COACH
+  on the board). A coach lifts your **cohesion** by developing a coachable group
+  and by **style fit**: a defensive coach (Thibodeau, Van Gundy) elevates a
+  defensive roster, a run-and-gun coach (D'Antoni, Nellie) elevates a fast, spacing
+  roster, a culture coach steadies a shaky locker room — and a stylistic mismatch
+  doesn't help. (Coaches use stylized arcade "head-coach" sprites.)
+- **Advanced efficiency reveal** — after the draft, each team's analysis surfaces
+  **true-shooting (TS%), turnover rate, usage and an estimated plus-minus/on-off
+  impact** per starter. A player can look fine on the board but, like LaMelo Ball
+  (low TS, high turnovers, questionable shot selection), be less efficient than the
+  box score suggests — that's flagged post-finalization and modestly discounts the
+  team's value.
 - **Online seat choice** — the manager who creates a live room now picks *which*
   seat (and therefore which draft slot) they want, rather than being forced to
   pick first.

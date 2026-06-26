@@ -45,15 +45,18 @@
     pendingPlayer: null, // player awaiting slot assignment in the modal
     clockSeconds: 60, // pick clock length (0 = off)
     capMode: false, // salary-cap drafting
+    capChoice: null, // chosen cap amount (150..250); null = auto by coach mode
     posMode: "locked", // "locked" | "flexible" position assignment
-    coachMode: false, // draft a head coach (extra round, $250 cap)
+    coachMode: false, // draft a head coach (a sixth, anytime slot)
+    orderMode: "snake", // "snake" | "linear" | "random"
+    draftOrder: null, // explicit pick order (persisted for random-order replay)
     turnGatePick: null, // (online) pickLog length for which the human pressed "Go"
     allowedEras: ["80s", "90s", "00s", "10s", "20s"],
   };
   const eraAllowed = (p) => (p.eras || []).some((d) => ui.allowedEras.includes(d));
   const salaryOf = (p) => (p.isCoach ? SCORING.coachSalary(p) : SCORING.salaryValue(p));
-  // Cap rises to $250 when coaches are drafted (the coach costs salary too).
-  const capAmount = () => (ui.coachMode ? SCORING.SALARY_CAP_WITH_COACH : SCORING.SALARY_CAP);
+  // Chosen cap, defaulting to $250 with coaches / $200 without.
+  const capAmount = () => ui.capChoice || (ui.coachMode ? SCORING.SALARY_CAP_WITH_COACH : SCORING.SALARY_CAP);
   const SALARY_CAP = SCORING.SALARY_CAP; // legacy reference (kept for tooltips)
   const managerSpent = (m) =>
     SCORING.starterPlayers({ starters: m.starters, bench: [] }).reduce((s, p) => s + salaryOf(p), 0) +
@@ -122,6 +125,18 @@
       $("#start-draft").textContent = ui.mode === "online" ? "Start Online Draft" : "Start Draft";
       renderManagerNameInputs();
     });
+
+    // Salary-cap amount: only relevant in cap mode; default tracks coach mode
+    // ($250 with a coach, $200 without) until the user picks a value themselves.
+    let capTouched = false;
+    const syncCapUI = () => {
+      $("#cap-amount-field").classList.toggle("hidden", !$("#cap-toggle").checked);
+      if (!capTouched) $("#cap-amount").value = $("#coach-toggle").checked ? "250" : "200";
+    };
+    $("#cap-toggle").addEventListener("change", syncCapUI);
+    $("#coach-toggle").addEventListener("change", syncCapUI);
+    $("#cap-amount").addEventListener("change", () => { capTouched = true; });
+    syncCapUI();
   }
 
   // ---- Online state (share-a-link relay) ---------------------------------
@@ -176,7 +191,11 @@
       cpuFlags: cpuFlags || ui.cpuFlags || [],
       posMode: ui.posMode,
       coachMode: ui.coachMode,
+      orderMode: ui.orderMode,
+      order: ui.draftOrder, // exact order for random-mode replay (else rebuilt)
     });
+    // Capture the order the first time (random mode) so it persists for replay.
+    if (!ui.draftOrder) ui.draftOrder = game.order.slice();
     (picks || []).forEach((pk) => {
       // pk may be an array [id, slot] or a Firebase object {0:id, 1:slot}.
       const p = findDraftable(pk[0]);
@@ -358,6 +377,9 @@
     ui.capMode = $("#cap-toggle").checked;
     ui.posMode = $("#posmode-select").value === "flexible" ? "flexible" : "locked";
     ui.coachMode = $("#coach-toggle").checked;
+    ui.capChoice = parseInt($("#cap-amount").value, 10) || null;
+    ui.orderMode = ["snake", "linear", "random"].includes($("#order-select").value)
+      ? $("#order-select").value : "snake";
     ui.allowedEras = Array.from($("#era-filters").querySelectorAll("input:checked")).map((c) => c.value);
     if (ui.allowedEras.length === 0) return alert("Select at least one era.");
     const eraErr = validateEraPool(names.length);
@@ -369,6 +391,7 @@
       return cb ? cb.checked : false;
     });
     ui.cpuFlags = cpuFlags;
+    ui.draftOrder = null; // fresh draft — let the engine build the order
     // Live online draft via Firebase when configured; otherwise link-relay.
     if (online && liveAvailable()) {
       startLiveDraft(names, cpuFlags);
@@ -377,7 +400,10 @@
 
     ui.online = online;
     ui.gameGen++;
-    game = new DraftGame(names, { benchSize: 0, cpuFlags, posMode: ui.posMode, coachMode: ui.coachMode });
+    game = new DraftGame(names, {
+      benchSize: 0, cpuFlags, posMode: ui.posMode, coachMode: ui.coachMode, orderMode: ui.orderMode,
+    });
+    ui.draftOrder = game.order.slice(); // capture (matters for random order)
     initCpuProfiles();
     buildDraftStaticUI();
     ui.staticBuilt = true;
@@ -388,21 +414,30 @@
 
   /** Game config that must travel with online links/rooms. */
   function currentConfig() {
-    return {
+    const cfg = {
       clock: ui.clockSeconds,
       cap: ui.capMode,
+      capAmt: ui.capChoice,
       eras: ui.allowedEras,
       pos: ui.posMode,
       coach: ui.coachMode,
+      order: ui.orderMode,
     };
+    // Random order isn't reproducible from the mode alone — carry the actual
+    // pick order so every device/replay sees the same sequence.
+    if (ui.orderMode === "random" && ui.draftOrder) cfg.seatOrder = ui.draftOrder;
+    return cfg;
   }
   function applyConfig(cfg) {
     if (!cfg) return;
     if (cfg.clock != null) ui.clockSeconds = cfg.clock;
     if (cfg.cap != null) ui.capMode = cfg.cap;
+    if (cfg.capAmt != null) ui.capChoice = cfg.capAmt;
     if (Array.isArray(cfg.eras) && cfg.eras.length) ui.allowedEras = cfg.eras;
     if (cfg.pos != null) ui.posMode = cfg.pos;
     if (cfg.coach != null) ui.coachMode = cfg.coach;
+    if (cfg.order != null) ui.orderMode = cfg.order;
+    if (Array.isArray(cfg.seatOrder)) ui.draftOrder = cfg.seatOrder;
   }
 
   // Each CPU gets its own temperament (how greedy vs. exploratory) and a draft
@@ -457,11 +492,13 @@
     // Position filter chips
     const pf = $("#pos-filters");
     pf.innerHTML = "";
-    ["ALL", ...STARTER_SLOTS].forEach((p) => {
-      const chip = el("div", "pf" + (p === ui.posFilter ? " active" : ""), p);
+    const filters = ["ALL", ...STARTER_SLOTS];
+    if (game.coachMode) filters.push("COACH");
+    filters.forEach((p) => {
+      const chip = el("div", "pf" + (p === ui.posFilter ? " active" : ""), p === "COACH" ? "🧠 COACH" : p);
       chip.addEventListener("click", () => {
         ui.posFilter = p;
-        pf.querySelectorAll(".pf").forEach((c) => c.classList.toggle("active", c.textContent === p));
+        pf.querySelectorAll(".pf").forEach((c) => c.classList.toggle("active", c.textContent === (p === "COACH" ? "🧠 COACH" : p)));
         renderPlayerList();
       });
       pf.appendChild(chip);
@@ -595,22 +632,26 @@
   }
   /** Best available pick for a manager (used by clock auto-pick and failover). */
   function bestAvailablePick(manager) {
-    // Coach round: hire the best-fitting available coach.
-    if (game.isCoachRound()) {
-      const coaches = (typeof COACH_POOL !== "undefined" ? COACH_POOL : []).filter((c) => isDraftable(manager, c));
-      if (!coaches.length) return null;
-      coaches.sort((a, b) => coachFit(manager, b) - coachFit(manager, a));
-      return { player: coaches[0], slot: "COACH" };
-    }
     const avail = PLAYER_POOL.filter((p) => isDraftable(manager, p));
-    if (!avail.length) return null;
-    avail.sort(
-      (a, b) =>
-        careerRating(b) + 0.15 * bestFit(manager, b) - (careerRating(a) + 0.15 * bestFit(manager, a))
-    );
-    const best = avail[0];
-    const ss = game.legalSlotsFor(manager, best).filter((s) => s !== "BENCH");
-    return { player: best, slot: ss.includes(best.pos) ? best.pos : ss[0] };
+    if (avail.length) {
+      avail.sort(
+        (a, b) =>
+          careerRating(b) + 0.15 * bestFit(manager, b) - (careerRating(a) + 0.15 * bestFit(manager, a))
+      );
+      const best = avail[0];
+      const ss = game.legalSlotsFor(manager, best).filter((s) => s !== "BENCH");
+      return { player: best, slot: ss.includes(best.pos) ? best.pos : ss[0] };
+    }
+    // No legal player (e.g. the five are set) — hire the best-fitting coach.
+    if (game.needsCoach(manager)) return bestAvailableCoach(manager);
+    return null;
+  }
+  /** Best-fitting available coach for a manager. */
+  function bestAvailableCoach(manager) {
+    const coaches = (typeof COACH_POOL !== "undefined" ? COACH_POOL : []).filter((c) => isDraftable(manager, c));
+    if (!coaches.length) return null;
+    coaches.sort((a, b) => coachFit(manager, b) - coachFit(manager, a));
+    return { player: coaches[0], slot: "COACH" };
   }
   /** Time expired — auto-draft the best available pick for this manager. */
   function autoPick(manager) {
@@ -716,20 +757,13 @@
    * natural position, bench only as a last resort).
    */
   function cpuChoose(manager) {
-    // Coach round: sample among the best-fitting available coaches.
-    if (game.isCoachRound()) {
-      const coaches = (typeof COACH_POOL !== "undefined" ? COACH_POOL : []).filter((c) => isDraftable(manager, c));
-      if (!coaches.length) return null;
-      const prof = cpuProfiles[manager.id] || { temp: 3.5 };
-      const graded = coaches.map((c) => ({ p: c, g: coachFit(manager, c) })).sort((a, b) => b.g - a.g);
-      const top = graded[0].g;
-      const pool = graded.filter((x) => x.g >= top - 4).slice(0, 4);
-      const weights = pool.map((x) => Math.exp((x.g - top) / prof.temp));
-      return { player: weightedPick(pool.map((x) => x.p), weights), slot: "COACH" };
-    }
-
     const avail = PLAYER_POOL.filter((p) => isDraftable(manager, p));
-    if (avail.length === 0) return null;
+    // No draftable player (the five are set) — or, late in the draft, time to grab
+    // the coach. CPUs hire their coach once players no longer fit a slot.
+    if (avail.length === 0) {
+      if (game.needsCoach(manager)) return cpuChooseCoach(manager);
+      return null;
+    }
 
     const prof = cpuProfiles[manager.id] || { temp: 3.5, style: "best" };
 
@@ -769,12 +803,22 @@
     return { player: best, slot };
   }
 
+  /** CPU coach pick: sample among the best-fitting available coaches. */
+  function cpuChooseCoach(manager) {
+    const coaches = (typeof COACH_POOL !== "undefined" ? COACH_POOL : []).filter((c) => isDraftable(manager, c));
+    if (!coaches.length) return null;
+    const prof = cpuProfiles[manager.id] || { temp: 3.5 };
+    const graded = coaches.map((c) => ({ p: c, g: coachFit(manager, c) })).sort((a, b) => b.g - a.g);
+    const top = graded[0].g;
+    const pool = graded.filter((x) => x.g >= top - 4).slice(0, 4);
+    const weights = pool.map((x) => Math.exp((x.g - top) / prof.temp));
+    return { player: weightedPick(pool.map((x) => x.p), weights), slot: "COACH" };
+  }
+
   function renderStatus() {
     const m = game.currentManager();
-    const coachRound = game.isCoachRound();
-    const label = (m.isCpu ? "🤖 " : "") + m.name + (coachRound ? " — drafting a head coach 🧠" : "");
-    $("#onclock-name").textContent = label;
-    $("#sticky-onclock").textContent = label;
+    $("#onclock-name").textContent = (m.isCpu ? "🤖 " : "") + m.name;
+    $("#sticky-onclock").textContent = (m.isCpu ? "🤖 " : "") + m.name;
     $("#onclock-meta").textContent =
       `Round ${game.currentRound()} · Pick #${game.overallPickNumber()} of ${game.totalPicks}` +
       (m.isCpu ? " · CPU drafting…" : "");
@@ -786,14 +830,17 @@
     });
 
     const banner = $("#must-fill-banner");
-    if (coachRound) {
-      banner.textContent = `🧠 ${m.name}: pick the head coach who best fits your roster.`;
-      banner.classList.remove("hidden");
-    } else if (game.mustFillStarter(m)) {
-      const slots = game.unfilledStarterSlots(m).join(", ");
-      banner.textContent = ui.posMode === "flexible"
-        ? `⚠️ ${m.name} must use remaining picks on starters — ${game.unfilledStarterSlots(m).length} slot(s) left to fill.`
-        : `⚠️ ${m.name} must use remaining picks on starters — still need: ${slots}`;
+    const needStarters = game.unfilledStarterSlots(m);
+    const needCoach = game.needsCoach(m);
+    if (needStarters.length || needCoach) {
+      const bits = [];
+      if (needStarters.length) {
+        bits.push(ui.posMode === "flexible"
+          ? `${needStarters.length} starter slot(s)`
+          : needStarters.join(", "));
+      }
+      if (needCoach) bits.push("a head coach 🧠");
+      banner.textContent = `⚠️ ${m.name} still needs: ${bits.join(" · ")}`;
       banner.classList.remove("hidden");
     } else {
       banner.classList.add("hidden");
@@ -813,13 +860,16 @@
     }
   }
 
-  // What's on the board right now: coaches during the coach round, otherwise
-  // players within the selected eras.
+  // What's on the board right now: players within the selected eras, plus the
+  // available coaches when coaches are enabled and this manager hasn't hired one
+  // (coaches can be drafted at any time, like a sixth position).
   function availablePlayers() {
-    if (game.isCoachRound()) {
-      return (typeof COACH_POOL !== "undefined" ? COACH_POOL : []).filter((c) => game.isAvailable(c.id));
+    let list = PLAYER_POOL.filter((p) => game.isAvailable(p.id) && eraAllowed(p));
+    const m = game.currentManager();
+    if (ui.coachMode && m && game.needsCoach(m) && typeof COACH_POOL !== "undefined") {
+      list = list.concat(COACH_POOL.filter((c) => game.isAvailable(c.id)));
     }
-    return PLAYER_POOL.filter((p) => game.isAvailable(p.id) && eraAllowed(p));
+    return list;
   }
 
   // Salary-cap helpers.
@@ -866,38 +916,25 @@
     const m = game.currentManager();
     let list = availablePlayers();
 
-    // Coach round: a flat list of coaches, ranked by fit (then pedigree).
-    if (game.isCoachRound()) {
-      if (ui.search) list = list.filter((c) => c.name.toLowerCase().includes(ui.search));
-      return list
-        .map((c) => ({ c, k: coachFit(m, c) }))
-        .sort((a, b) => b.k - a.k || b.c.overall - a.c.overall)
-        .map((x) => x.c);
-    }
+    // Position filter: COACH → coaches only; a position → players at that slot;
+    // ALL → everything (players and any available coaches mixed in).
+    if (ui.posFilter === "COACH") list = list.filter((p) => p.isCoach);
+    else if (ui.posFilter !== "ALL") list = list.filter((p) => !p.isCoach && p.eligible.includes(ui.posFilter));
 
-    if (ui.posFilter !== "ALL") {
-      list = list.filter((p) => p.eligible.includes(ui.posFilter));
-    }
-    if (ui.search) {
-      list = list.filter((p) => p.name.toLowerCase().includes(ui.search));
-    }
+    if (ui.search) list = list.filter((p) => p.name.toLowerCase().includes(ui.search));
 
-    // For "fit" we decorate-sort-undecorate: compute bestFit once per player
-    // (not twice per comparison). Other keys are cheap/memoized.
+    // Sort keys that work for both players and coaches.
     if (ui.sortBy === "fit") {
-      return list
-        .map((p) => ({ p, k: bestFit(m, p) }))
-        .sort((a, b) => b.k - a.k)
-        .map((x) => x.p);
+      return list.map((p) => ({ p, k: bestFit(m, p) })).sort((a, b) => b.k - a.k).map((x) => x.p);
     }
-    const sorters = {
-      career: (a, b) => careerRating(b) - careerRating(a),
-      peak: (a, b) => peakOverall(b) - peakOverall(a),
-      winner: (a, b) => b.career.winning - a.career.winning,
-      durable: (a, b) => a.injuryRisk - b.injuryRisk,
+    const keyFns = {
+      career: (p) => (p.isCoach ? p.overall : careerRating(p)),
+      peak: (p) => (p.isCoach ? p.overall : peakOverall(p)),
+      winner: (p) => (p.isCoach ? p.overall - 5 : p.career.winning),
+      durable: (p) => (p.isCoach ? 50 : 100 - p.injuryRisk),
     };
-    list.sort(sorters[ui.sortBy] || sorters.career);
-    return list;
+    const kf = keyFns[ui.sortBy] || keyFns.career;
+    return list.map((p) => ({ p, k: kf(p) })).sort((a, b) => b.k - a.k).map((x) => x.p);
   }
 
   /** Best fit grade across the player's currently-legal slots for this manager. */
@@ -928,82 +965,50 @@
       return;
     }
 
-    // Coach round: render coach cards instead of player cards.
-    if (game.isCoachRound()) {
-      const frag = document.createDocumentFragment();
-      players.forEach((coach) => {
-        const affordable = !ui.capMode || canAfford(m, coach);
-        const canDraft = !cpuOnClock && !locked && game.canDraft(m, coach) && affordable;
-        const fit = Math.round(coachFit(m, coach));
-        const t = coach.traits;
-        const row = el("div", "player-row coach-row" + (canDraft ? "" : " disabled"));
-        const photo = playerPhoto(coach, coach.overall);
-        const salTag = `<span class="tag salary${ui.capMode && !affordable ? " unaffordable" : ""}" title="Coach salary (of a $${capAmount()} cap)">$${salaryOf(coach)}</span>`;
-        const meta = el("div", "player-meta");
+    const frag = document.createDocumentFragment();
+    players.forEach((p) => {
+      const affordable = !ui.capMode || canAfford(m, p);
+      const canDraft = !cpuOnClock && !locked && game.canDraft(m, p) && affordable;
+
+      const row = el("div", "player-row" + (p.isCoach ? " coach-row" : "") + (canDraft ? "" : " disabled"));
+      const photo = playerPhoto(p, p.isCoach ? p.overall : careerRating(p));
+      const salTag = ui.capMode
+        ? `<span class="tag salary${!affordable ? " unaffordable" : ""}" title="Salary (of a $${capAmount()} cap)">$${salaryOf(p)}</span>`
+        : "";
+      const meta = el("div", "player-meta");
+
+      if (p.isCoach) {
+        const t = p.traits;
+        const fit = Math.round(coachFit(m, p));
         meta.innerHTML = `
-          <div class="pname">🧠 ${coach.name}</div>
+          <div class="pname">🧠 ${p.name} <span class="hc-badge" title="Head coach">HC</span></div>
           <div class="psub">
-            <span class="tag pos">${coach.style}</span>
-            ${ui.capMode ? salTag : ""}
-            <span class="tag" title="Coaching pedigree">Coach ${coach.overall}</span>
+            <span class="tag pos">${p.style}</span>
+            ${salTag}
+            <span class="tag" title="Coaching pedigree">Coach ${p.overall}</span>
             <span class="tag" title="Offensive acumen">Off ${t.off}</span>
             <span class="tag" title="Defensive acumen">Def ${t.def}</span>
             <span class="tag" title="Pace / transition">Pace ${t.pace}</span>
-            <span class="tag" title="Player development">Dev ${t.dev}</span>
             <span class="tag fit">Fit ${fit}</span>
           </div>`;
-        const actions = el("div", "player-actions");
-        if (canDraft) {
-          const btn = el("button", "btn primary mini", "Hire");
-          btn.onclick = () => onDraftClick(coach);
-          actions.appendChild(btn);
-        } else if (cpuOnClock) {
-          actions.appendChild(el("span", "slot-sub", "🤖 CPU"));
-        } else if (locked) {
-          actions.appendChild(el("span", "slot-sub", "⏳ waiting"));
-        } else if (ui.capMode && !affordable) {
-          actions.appendChild(el("span", "slot-sub", "💰 over cap"));
-        } else {
-          actions.appendChild(el("span", "slot-sub", "—"));
-        }
-        row.appendChild(photo);
-        row.appendChild(meta);
-        row.appendChild(actions);
-        frag.appendChild(row);
-      });
-      list.appendChild(frag);
-      return;
-    }
-
-    const frag = document.createDocumentFragment();
-    players.forEach((p) => {
-      const ovr = careerRating(p);
-      const affordable = !ui.capMode || canAfford(m, p);
-      const canDraft = !cpuOnClock && !locked && game.canDraft(m, p) && affordable;
-      const fit = Math.round(bestFit(m, p));
-
-      const row = el("div", "player-row" + (canDraft ? "" : " disabled"));
-
-      const photo = playerPhoto(p, ovr);
-
-      // Salary value is always shown; in cap mode it also flags affordability.
-      const salTag = `<span class="tag salary${ui.capMode && !affordable ? " unaffordable" : ""}" title="Salary value (of a $${capAmount()} team cap)">$${salaryOf(p)}</span>`;
-      const meta = el("div", "player-meta");
-      meta.innerHTML = `
-        <div class="pname">${tierBadge(p)} ${p.name} ${injuryDot(p.injuryRisk)}</div>
-        <div class="psub">
-          <span class="tag pos">${p.eligible.join("/")}</span>
-          ${salTag}
-          <span class="tag" title="Career-peak ability">Peak ${peakOverall(p)}</span>
-          <span class="tag" title="Clutch shot-making">Clutch ${p.ext.clutch}</span>
-          <span class="tag" title="Usage rate (ball dominance ${p.career.ballDominance})">${SCORING.usageTier(p)}</span>
-          <span class="tag">${p.archetype}</span>
-          ${ui.sortBy === "fit" || canDraft ? `<span class="tag fit">Fit ${fit}</span>` : ""}
-        </div>`;
+      } else {
+        const fit = Math.round(bestFit(m, p));
+        meta.innerHTML = `
+          <div class="pname">${tierBadge(p)} ${p.name} ${injuryDot(p.injuryRisk)}</div>
+          <div class="psub">
+            <span class="tag pos">${p.eligible.join("/")}</span>
+            ${salTag}
+            <span class="tag" title="Career-peak ability">Peak ${peakOverall(p)}</span>
+            <span class="tag" title="Clutch shot-making">Clutch ${p.ext.clutch}</span>
+            <span class="tag" title="Usage rate (ball dominance ${p.career.ballDominance})">${SCORING.usageTier(p)}</span>
+            <span class="tag">${p.archetype}</span>
+            ${ui.sortBy === "fit" || canDraft ? `<span class="tag fit">Fit ${fit}</span>` : ""}
+          </div>`;
+      }
 
       const actions = el("div", "player-actions");
       if (canDraft) {
-        const btn = el("button", "btn primary mini", "Draft");
+        const btn = el("button", "btn primary mini", p.isCoach ? "Hire" : "Draft");
         btn.onclick = () => onDraftClick(p);
         actions.appendChild(btn);
       } else if (cpuOnClock) {
@@ -1013,7 +1018,7 @@
       } else if (ui.capMode && !affordable) {
         actions.appendChild(el("span", "slot-sub", "💰 over cap"));
       } else {
-        actions.appendChild(el("span", "slot-sub", "No legal slot"));
+        actions.appendChild(el("span", "slot-sub", p.isCoach ? "—" : "No legal slot"));
       }
 
       row.appendChild(photo);
@@ -1056,9 +1061,13 @@
     const m = game.currentManager();
     const slots = game.legalSlotsFor(m, player);
     if (slots.length === 0) return;
-    // Flexible mode (and the coach round) auto-arrange — no manual slot picker.
+    // Coaches and flexible-mode picks auto-arrange — no manual slot picker.
     // Prefer the player's natural position when it's one of the valid slots.
-    if (game.posMode === "flexible" && !game.isCoachRound()) {
+    if (player.isCoach) {
+      commitPick(player, "COACH");
+      return;
+    }
+    if (game.posMode === "flexible") {
       const slot = slots.includes(player.pos) ? player.pos : slots[0];
       commitPick(player, slot);
       return;
@@ -1138,9 +1147,8 @@
             `<span class="db-name">${e.player.name}</span>` +
             `<span class="db-sub">${ovr}${salPart}</span>`;
         } else {
-          const coachRd = game.coachMode && rd === game.coachRoundNumber;
           cell.innerHTML =
-            `<span class="db-pick-no">${coachRd ? "🧠 Coach" : "R" + rd}</span>` +
+            `<span class="db-pick-no">R${rd}</span>` +
             `<span>${isCurrent ? "picking…" : "—"}</span>`;
         }
         col.appendChild(cell);
@@ -1159,21 +1167,6 @@
     const wrap = $("#team-needs");
     const m = game.currentManager();
 
-    // Coach round: guide the manager toward a coach who fits their roster.
-    if (game.isCoachRound()) {
-      const coaches = (typeof COACH_POOL !== "undefined" ? COACH_POOL : []).filter((c) => isDraftable(m, c));
-      coaches.sort((a, b) => coachFit(m, b) - coachFit(m, a));
-      const top = coaches[0];
-      const recHtml = top
-        ? `💡 <b>Best fit:</b> <b>${top.name}</b> (${top.style}) — ${SCORING.coachAdjust(SCORING.starterPlayers({ starters: m.starters, bench: [] }), top).note}.`
-        : "No affordable coach available.";
-      wrap.innerHTML =
-        `<div class="tn-title">${m.isCpu ? "🤖 " : ""}${m.name} — pick a head coach 🧠</div>` +
-        `<div class="tn-open">A coach who fits your identity (defense, pace, or offense) lifts your cohesion; a mismatch doesn't help.</div>` +
-        `<div class="tn-rec">${recHtml}</div>`;
-      return;
-    }
-
     const a = SCORING.analyzeRoster({ starters: m.starters, bench: [] });
 
     const strengthChips = a.strengths
@@ -1182,19 +1175,33 @@
     const gapChips = a.gaps
       .map((i) => `<span class="tn-chip bad" title="${i.miss}">✗ ${i.label}</span>`)
       .join("");
+    const coachChip = game.needsCoach(m) ? `<span class="tn-chip bad">✗ head coach 🧠</span>` : "";
     const haveRow = strengthChips || `<span class="tn-chip">No picks yet</span>`;
 
-    const openTxt = a.openPositions.length
-      ? `<b>${a.openPositions.join(", ")}</b>`
-      : "all five filled";
+    const openSlots = a.openPositions.slice();
+    if (game.needsCoach(m)) openSlots.push("Coach");
+    const openTxt = openSlots.length ? `<b>${openSlots.join(", ")}</b>` : "all set";
 
+    // Recommend the best player; if only the coach remains, recommend a coach.
+    let recHtml;
     const rec = recommendPick(m, a);
-    const recHtml = rec ? `💡 <b>Target:</b> ${rec.text}` : "Your starting five is set.";
+    if (rec) {
+      recHtml = `💡 <b>Target:</b> ${rec.text}`;
+    } else if (game.needsCoach(m)) {
+      const coaches = (typeof COACH_POOL !== "undefined" ? COACH_POOL : []).filter((c) => isDraftable(m, c));
+      coaches.sort((x, y) => coachFit(m, y) - coachFit(m, x));
+      const top = coaches[0];
+      recHtml = top
+        ? `💡 <b>Hire a coach:</b> <b>${top.name}</b> (${top.style}) — ${SCORING.coachAdjust(SCORING.starterPlayers({ starters: m.starters, bench: [] }), top).note}.`
+        : "Your roster is set.";
+    } else {
+      recHtml = "Your roster is set.";
+    }
 
     wrap.innerHTML =
       `<div class="tn-title">${m.isCpu ? "🤖 " : ""}${m.name} — what your team has & needs</div>` +
-      `<div class="tn-row">${haveRow}${gapChips}</div>` +
-      `<div class="tn-open">Open positions: ${openTxt}</div>` +
+      `<div class="tn-row">${haveRow}${gapChips}${coachChip}</div>` +
+      `<div class="tn-open">Open: ${openTxt}</div>` +
       `<div class="tn-rec">${recHtml}</div>`;
   }
 
@@ -1380,6 +1387,24 @@
            <ul class="res-pairings">${chemItems.map((s) => `<li class="${s.kind}">${s.text}</li>`).join("")}</ul>`
         : "";
 
+      // Advanced efficiency read — TS% / turnovers / estimated impact, surfaced
+      // only now (post-finalization) so inefficient picks are exposed at the end.
+      const eff = SCORING.efficiencyAnalysis(rosterRef);
+      const effNotesHtml = eff.notes.length
+        ? `<ul class="res-pairings">${eff.notes.map((s) => `<li class="${s.kind}">${s.text}</li>`).join("")}</ul>`
+        : `<p class="muted" style="margin:6px 0 0">No efficiency red flags — the shot quality holds up.</p>`;
+      const topImp = eff.impacts.slice(0, 2).map((x) => `${x.name} ${x.impact >= 0 ? "+" : ""}${x.impact}`).join(", ");
+      const botImp = eff.impacts.slice(-1).map((x) => `${x.name} ${x.impact >= 0 ? "+" : ""}${x.impact}`).join("");
+      const effHtml = `
+        <div class="res-subhead">Advanced efficiency (post-draft reveal)</div>
+        <div class="res-eff">
+          <span class="eff-pill" title="Usage-weighted team true-shooting proxy">Team TS ${eff.teamTS}</span>
+          <span class="eff-pill" title="Usage-weighted team turnover rate (lower is better)">Team TOV ${eff.teamTOV}</span>
+          <span class="eff-pill" title="Estimated plus-minus / on-off impact">Top impact: ${topImp}</span>
+          ${eff.impacts.length > 2 ? `<span class="eff-pill" title="Lowest estimated impact starter">Lowest: ${botImp}</span>` : ""}
+        </div>
+        ${effNotesHtml}`;
+
       // Prose recap of the 15-year run — highs, lows, what worked & didn't.
       const narrative = SCORING.careerNarrative(rosterRef, ev);
       const narrativeHtml = narrative
@@ -1419,6 +1444,7 @@
           </div>
         </div>
         ${synHtml}
+        ${effHtml}
         ${narrativeHtml}
         <div class="res-subhead">15-year win trajectory</div>
         <div class="timeline">${bars}</div>`;

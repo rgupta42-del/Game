@@ -251,6 +251,23 @@ select:focus, input:focus { border-color: var(--accent-2); }
   background: #0b0e13; border-top-left-radius: 7px; padding: 0 5px;
   font-weight: 900; font-size: 13px; line-height: 18px; border: 1px solid var(--line); border-right: none; border-bottom: none;
 }
+/* Coach head sprite: a distinct "clipboard" look so coaches read differently
+   from players, still with the arcade rating chip + scanlines. */
+.coach-row .player-photo {
+  background: radial-gradient(circle at 50% 30%, #2b2336, #140d1c);
+  border-color: var(--accent-2); box-shadow: 0 0 9px rgba(74,163,255,0.4);
+}
+.coach-row .player-photo .ph-initials { color: var(--accent-2); }
+.coach-row .player-photo::before {
+  content: "🧠"; position: absolute; top: 2px; left: 3px; z-index: 2; font-size: 12px; opacity: 0.85;
+}
+.hc-badge {
+  font-size: 9px; font-weight: 900; letter-spacing: 0.5px; color: #1a1206;
+  background: var(--accent-2); border-radius: 5px; padding: 0 4px; margin-left: 4px; vertical-align: middle;
+}
+.res-eff { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 2px; }
+.eff-pill { font-size: 12px; font-weight: 700; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+
 .player-meta .pname { font-weight: 700; font-size: 15px; }
 .player-meta .psub { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
 .tag { background: #11141a; border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }

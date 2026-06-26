@@ -14,7 +14,11 @@
  *                player to a distinct slot they're eligible for). Existing picks
  *                may shuffle slots to make room (PG→SF, SF→PF, etc.).
  *
- * An optional COACH round (last round) lets each manager draft one head coach.
+ * Draft ORDER can be snake (1234·4321), linear (1234·1234), or random-per-round
+ * (a fresh random permutation each round so no seat has a built-in advantage).
+ *
+ * An optional HEAD COACH is a sixth roster slot that can be drafted at ANY point,
+ * just like a position — each manager ends with five starters and one coach.
  */
 
 const STARTER_SLOTS = ["PG", "SG", "SF", "PF", "C"];
@@ -22,12 +26,13 @@ const STARTER_SLOTS = ["PG", "SG", "SF", "PF", "C"];
 class DraftGame {
   /**
    * @param {string[]} managerNames
-   * @param {object}  opts  { benchSize, cpuFlags, posMode, coachMode }
+   * @param {object}  opts  { benchSize, cpuFlags, posMode, coachMode, orderMode, order }
    */
   constructor(managerNames, opts = {}) {
     this.benchSize = opts.benchSize ?? 2;
     this.posMode = opts.posMode === "flexible" ? "flexible" : "locked";
     this.coachMode = !!opts.coachMode;
+    this.orderMode = ["snake", "linear", "random"].includes(opts.orderMode) ? opts.orderMode : "snake";
     this.picksPerManager = STARTER_SLOTS.length + this.benchSize + (this.coachMode ? 1 : 0);
     const cpuFlags = opts.cpuFlags ?? [];
 
@@ -46,17 +51,34 @@ class DraftGame {
 
     this.draftedIds = new Set();
     this.pickLog = []; // { managerId, player, slot, round, overall }
-    this.order = this._buildOrder();
+    // A caller can supply the exact pick order (used to replay a random-order
+    // draft deterministically online); otherwise build it from orderMode.
+    const expectedLen = this.picksPerManager * this.managers.length;
+    this.order =
+      Array.isArray(opts.order) && opts.order.length === expectedLen
+        ? opts.order.slice()
+        : this._buildOrder();
     this.currentPick = 0; // index into this.order
   }
 
-  /** Build the full snake order as a flat array of manager indices. */
+  /** Fisher–Yates shuffle (in place). */
+  _shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  /** Build the pick order as a flat array of manager indices per the orderMode. */
   _buildOrder() {
     const order = [];
     const n = this.managers.length;
     for (let round = 0; round < this.picksPerManager; round++) {
-      const seq = [...Array(n).keys()];
-      if (round % 2 === 1) seq.reverse();
+      let seq = [...Array(n).keys()];
+      if (this.orderMode === "snake" && round % 2 === 1) seq.reverse();
+      else if (this.orderMode === "random") seq = this._shuffle(seq);
+      // "linear" leaves seq as 0..n-1 every round.
       order.push(...seq);
     }
     return order;
@@ -80,14 +102,9 @@ class DraftGame {
     return Math.floor(this.currentPick / this.managers.length) + 1;
   }
 
-  /** The (1-indexed) round in which coaches are drafted, or -1 if no coach mode. */
-  get coachRoundNumber() {
-    return this.coachMode ? this.picksPerManager : -1;
-  }
-
-  /** Is the draft currently in the coach round? */
-  isCoachRound() {
-    return this.coachMode && !this.isComplete && this.currentRound() === this.coachRoundNumber;
+  /** Does this manager still owe a head-coach pick? */
+  needsCoach(manager) {
+    return this.coachMode && !manager.coach;
   }
 
   /** Overall pick number, 1-indexed. */
@@ -104,22 +121,16 @@ class DraftGame {
     return count;
   }
 
-  /** Remaining picks for a manager that must go to STARTER slots (excludes the
-   *  coach round). */
-  _starterPicksRemaining(manager) {
-    let count = 0;
-    for (let i = this.currentPick; i < this.order.length; i++) {
-      if (this.order[i] !== manager.id) continue;
-      const round = Math.floor(i / this.managers.length) + 1;
-      if (this.coachMode && round === this.coachRoundNumber) continue;
-      count++;
-    }
-    return count;
-  }
-
   /** Starter positions a manager still needs to fill. */
   unfilledStarterSlots(manager) {
     return STARTER_SLOTS.filter((s) => !manager.starters[s]);
+  }
+
+  /** All required slots a manager still owes (starters + coach), for the banner. */
+  unfilledRequiredSlots(manager) {
+    const slots = this.unfilledStarterSlots(manager);
+    if (this.needsCoach(manager)) slots.push("COACH");
+    return slots;
   }
 
   /** Players currently assigned to a starting slot. */
@@ -128,11 +139,12 @@ class DraftGame {
   }
 
   /**
-   * If a manager's remaining (starter) picks exactly equal their unfilled starter
-   * slots, every remaining pick MUST go toward filling a starter slot.
+   * If a manager's remaining picks exactly equal their unfilled required slots
+   * (starters + coach), every remaining pick MUST fill one of them. With no bench
+   * this is effectively always true, so the board never offers the bench.
    */
   mustFillStarter(manager) {
-    return this._starterPicksRemaining(manager) <= this.unfilledStarterSlots(manager).length;
+    return this.picksRemainingFor(manager) <= this.unfilledRequiredSlots(manager).length;
   }
 
   /** Is this player still on the board? */
@@ -191,11 +203,10 @@ class DraftGame {
    * Returns an array of slot keys: starter position keys, "BENCH", or "COACH".
    */
   legalSlotsFor(manager, player) {
-    // Coach round: only coaches, into the single coach slot.
-    if (this.isCoachRound()) {
-      return player && player.isCoach && !manager.coach ? ["COACH"] : [];
+    // Coaches: a sixth slot that can be filled at ANY time (one per manager).
+    if (player && player.isCoach) {
+      return this.coachMode && !manager.coach ? ["COACH"] : [];
     }
-    if (player && player.isCoach) return []; // coaches only draftable in the coach round
 
     if (this.posMode === "flexible") {
       return this._flexibleSlots(manager, player);
@@ -230,15 +241,13 @@ class DraftGame {
     const manager = this.currentManager();
     if (!manager) throw new Error("Draft is already complete.");
 
-    // --- Coach round ---
-    if (this.isCoachRound()) {
-      if (!player.isCoach || manager.coach) {
-        throw new Error(`${manager.name} must draft a head coach right now.`);
-      }
+    // --- Head coach (any time) ---
+    if (player.isCoach) {
+      if (!this.coachMode) throw new Error("Coaches aren't enabled in this draft.");
+      if (manager.coach) throw new Error(`${manager.name} already has a head coach.`);
       manager.coach = player;
       return this._record(manager, player, "COACH");
     }
-    if (player.isCoach) throw new Error("Coaches are drafted in the final round.");
 
     // --- Flexible positions ---
     if (this.posMode === "flexible") {

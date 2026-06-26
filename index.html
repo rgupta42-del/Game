@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=18" />
+  <link rel="stylesheet" href="styles.css?v=19" />
 </head>
 <body>
   <header class="topbar">
@@ -69,6 +69,16 @@
         </div>
 
         <div class="field">
+          <label for="order-select">Draft order</label>
+          <select id="order-select">
+            <option value="snake" selected>Snake — 1·2·3·4 then 4·3·2·1 (reverses each round)</option>
+            <option value="linear">Linear — 1·2·3·4 every round (same order each round)</option>
+            <option value="random">Random — a fresh random order each round (no fixed advantage)</option>
+          </select>
+          <span class="hint">Random reshuffles the pick order every round so no seat has a built-in edge.</span>
+        </div>
+
+        <div class="field">
           <label for="posmode-select">Position rules</label>
           <select id="posmode-select">
             <option value="locked" selected>Locked — you assign each pick to a fixed open slot</option>
@@ -79,17 +89,29 @@
 
         <div class="field">
           <label class="cap-toggle">
-            <input type="checkbox" id="cap-toggle" />
-            <span>💰 Salary-cap mode — each team has a $200 cap (stars cost more, so you can't stack a Tier-1A roster)</span>
+            <input type="checkbox" id="coach-toggle" />
+            <span>🧠 Draft a head coach — each team also drafts one of the top 30 coaches since the ’80s, hireable at any point like a sixth position.</span>
           </label>
+          <span class="hint">A great coach who fits your style (defensive coach + defensive team, run-and-gun + a fast team) lifts your cohesion; a mismatch doesn't.</span>
         </div>
 
         <div class="field">
           <label class="cap-toggle">
-            <input type="checkbox" id="coach-toggle" />
-            <span>🧠 Draft a head coach — adds a coach round (top 30 coaches since the ’80s). In cap mode the cap rises to $250 and the coach costs salary too.</span>
+            <input type="checkbox" id="cap-toggle" />
+            <span>💰 Salary-cap mode — every player (and coach) costs salary on a steep curve, so you can't stack a Tier-1A roster.</span>
           </label>
-          <span class="hint">A great coach who fits your style (defensive coach + defensive team, run-and-gun + a fast team) lifts your cohesion; a mismatch doesn't.</span>
+        </div>
+
+        <div class="field hidden" id="cap-amount-field">
+          <label for="cap-amount">Salary cap</label>
+          <select id="cap-amount">
+            <option value="150">$150</option>
+            <option value="175">$175</option>
+            <option value="200" selected>$200</option>
+            <option value="225">$225</option>
+            <option value="250">$250</option>
+          </select>
+          <span class="hint">Defaults to $250 with a coach, $200 without — change it to tighten or loosen the squeeze.</span>
         </div>
 
         <p class="hint">Each manager drafts a starting five — PG, SG, SF, PF and C. No bench.</p>
@@ -222,13 +244,13 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=18"></script>
-  <script src="js/firebase-sync.js?v=18"></script>
+  <script src="js/firebase-config.js?v=19"></script>
+  <script src="js/firebase-sync.js?v=19"></script>
 
-  <script src="js/players.js?v=18"></script>
-  <script src="js/coaches.js?v=18"></script>
-  <script src="js/scoring.js?v=18"></script>
-  <script src="js/draft.js?v=18"></script>
-  <script src="js/app.js?v=18"></script>
+  <script src="js/players.js?v=19"></script>
+  <script src="js/coaches.js?v=19"></script>
+  <script src="js/scoring.js?v=19"></script>
+  <script src="js/draft.js?v=19"></script>
+  <script src="js/app.js?v=19"></script>
 </body>
 </html>

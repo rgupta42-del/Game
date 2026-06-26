@@ -660,6 +660,78 @@ function coachNote(roster) {
 }
 
 // --------------------------------------------------------------------------
+//  Advanced efficiency analysis (revealed AFTER the draft)
+// --------------------------------------------------------------------------
+
+/**
+ * Advanced-stats read on a finalized roster — true-shooting (TS%), turnover
+ * rate, usage and an estimated impact (on/off-style) per starter, plus a
+ * usage-weighted team efficiency. The point: a player can look like a fine pick
+ * on the board, but inefficient, turnover-prone, low-TS volume scorers (LaMelo,
+ * Trae, Westbrook) are worth less than they appear — and that's surfaced here,
+ * post-finalization, with a modest discount to the team's value.
+ *
+ * Returns { notes:[{kind,text}], teamTS, teamTOV, impacts:[{name,impact}], delta }.
+ */
+function efficiencyAnalysis(roster) {
+  const s = starterPlayers(roster);
+  if (!s.length) return { notes: [], teamTS: 0, teamTOV: 0, impacts: [], delta: 0 };
+  const e = (p) => p.ext || {};
+  const r = (p) => p.ratings;
+  const c = (p) => p.career;
+  const TS = (p) => (e(p).efficiency != null ? e(p).efficiency : 70);
+  const TOV = (p) => (e(p).turnovers != null ? e(p).turnovers : 42);
+
+  // Usage-weighted team true-shooting + turnover rate (the ball goes through the
+  // high-usage players more, so their efficiency matters more).
+  const usage = (p) => Math.max(20, c(p).ballDominance);
+  const totU = s.reduce((a, p) => a + usage(p), 0);
+  const teamTS = s.reduce((a, p) => a + TS(p) * usage(p), 0) / totU;
+  const teamTOV = s.reduce((a, p) => a + TOV(p) * usage(p), 0) / totU;
+
+  // Estimated per-player impact (a plus-minus / on-off proxy): efficient,
+  // low-turnover two-way creation helps; empty, inefficient volume hurts.
+  const impacts = s.map((p) => {
+    const def = (r(p).perimeterD + r(p).interiorD + (e(p).steals || 40) + (e(p).blocks || 40)) / 4;
+    const impact =
+      (TS(p) - 72) * 0.10 - (TOV(p) - 44) * 0.06 + (c(p).elevates - 70) * 0.05 +
+      (def - 68) * 0.04 + (peakOverall(p) - 78) * 0.10;
+    return { name: p.name, impact: Math.round(impact * 10) / 10 };
+  });
+
+  const notes = [];
+  s.forEach((p) => {
+    const ts = TS(p), tov = TOV(p), usg = c(p).ballDominance;
+    if (usg >= 68 && (ts <= 70 || tov >= 58)) {
+      const reasons = [];
+      if (ts <= 70) reasons.push(`a low true-shooting mark (TS ${ts})`);
+      if (tov >= 58) reasons.push(`a high turnover rate (${tov})`);
+      if (ts <= 66 && r(p).shooting < 80) reasons.push("questionable shot selection");
+      notes.push({
+        kind: "bad",
+        text: `⚠️ ${p.name} carries ${reasons.join(", ")} on heavy usage — less efficient than the box score suggests, which quietly drags the offense.`,
+      });
+    } else if (ts >= 85 && tov <= 34) {
+      notes.push({
+        kind: "good",
+        text: `✅ ${p.name} is hyper-efficient (TS ${ts}) and protects the ball (turnovers ${tov}) — real value beyond the raw numbers.`,
+      });
+    }
+  });
+
+  // Team-level efficiency adjustment (small; raw rating already docks individuals,
+  // this captures the compounding effect of a whole roster's shot quality).
+  const delta = clamp((teamTS - 73) * 0.18 - (teamTOV - 44) * 0.10, -6, 4);
+  return {
+    notes: notes.slice(0, 5),
+    teamTS: Math.round(teamTS),
+    teamTOV: Math.round(teamTOV),
+    impacts: impacts.sort((a, b) => b.impact - a.impact),
+    delta,
+  };
+}
+
+// --------------------------------------------------------------------------
 //  Team fit / chemistry
 // --------------------------------------------------------------------------
 
@@ -818,7 +890,7 @@ function rosterContext(roster) {
 
   if (filled === 0) {
     return { starters, posMult, bench, filled, completeness, chemistry: 0, construction: 0,
-      fitDelta: 0, elevateBoost: 0, avgWinning: 0, avgClutch: 0, alphaBoost: 0 };
+      fitDelta: 0, efficiencyDelta: 0, elevateBoost: 0, avgWinning: 0, avgClutch: 0, alphaBoost: 0 };
   }
 
   // Lineup construction (who's at which slot) folds into chemistry, so each
@@ -828,6 +900,9 @@ function rosterContext(roster) {
   // Duplication/spacing + head coach, scaled by how full the roster is. Applied
   // as a post-clamp composite multiplier so it survives chemistry saturation.
   const fitDelta = teamFitDelta(roster) * completeness;
+  // Advanced efficiency (TS% / turnovers) — a small end-of-draft adjustment that
+  // captures shot-quality not obvious during selection.
+  const efficiencyDelta = efficiencyAnalysis(roster).delta * completeness;
   const avgElevates = starters.reduce((s, p) => s + p.career.elevates, 0) / filled;
   const avgWinning = starters.reduce((s, p) => s + p.career.winning, 0) / filled;
   const avgClutch = starters.reduce((s, p) => s + (ext(p).clutch != null ? ext(p).clutch : 70), 0) / filled;
@@ -836,7 +911,7 @@ function rosterContext(roster) {
   const alphaBoost = Math.max(0, maxDom - 86) * 0.25;
 
   return {
-    starters, posMult, bench, filled, completeness, chemistry, construction, fitDelta,
+    starters, posMult, bench, filled, completeness, chemistry, construction, fitDelta, efficiencyDelta,
     elevateBoost: (avgElevates - 70) * 0.06, avgWinning, avgClutch, alphaBoost,
   };
 }
@@ -917,8 +992,11 @@ function evaluateRoster(roster) {
   // +6% (spacing engineered by design / a coach who fits), even for star teams
   // whose raw chemistry is already pinned at 100.
   const fitMult = clamp(1 + ctx.fitDelta * 0.006, 0.88, 1.10);
+  // Advanced efficiency: a modest end-of-draft discount/credit on shot quality.
+  const effMult = clamp(1 + ctx.efficiencyDelta * 0.006, 0.94, 1.03);
   const composite =
-    (avgWins * 0.55 + avgPlayoffIndex * 0.5 + titlesExpected * 4.5 + peakWins * 0.25) * cohesionMult * fitMult;
+    (avgWins * 0.55 + avgPlayoffIndex * 0.5 + titlesExpected * 4.5 + peakWins * 0.25) *
+    cohesionMult * fitMult * effMult;
 
   // The displayed cohesion reflects the construction/coach shaping too, so the
   // number on the card lines up with the call-outs (a 3-rim-protector team reads
@@ -1193,6 +1271,7 @@ const SCORING = {
   constructionNotes,
   careerNarrative,
   teamFitDelta,
+  efficiencyAnalysis,
   rosterPlayers,
   starterPlayers,
   // Back-compat alias: the UI's "overall" badge now shows the career rating.
