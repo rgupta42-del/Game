@@ -25,14 +25,12 @@ body {
 }
 
 /* ---------------- Topbar ---------------- */
+/* Not sticky: during a draft the draft-room header below is the one fixed
+   element, so the brand bar scrolls away and gives the game the screen. */
 .topbar {
   padding: 18px 28px;
   border-bottom: 1px solid var(--line);
   background: rgba(15,17,21,0.7);
-  backdrop-filter: blur(6px);
-  position: sticky;
-  top: 0;
-  z-index: 20;
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
 }
 .brand { display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit; }
@@ -90,18 +88,56 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .tag.salary { color: var(--good); }
 .tag.salary.unaffordable { color: var(--bad); }
 
-/* ---------------- Sticky draft bar (always-visible clock, esp. mobile) -------- */
+/* ---------------- Sticky draft-room header (clock + tabs, Yahoo-style) ------- */
 .draft-sticky {
   position: sticky; top: 0; z-index: 40;
-  display: flex; align-items: center; gap: 12px;
-  background: rgba(15, 18, 24, 0.96); backdrop-filter: blur(6px);
-  border: 1px solid var(--line); border-radius: 12px;
-  padding: 8px 14px; margin-bottom: 12px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  display: flex; flex-direction: column; gap: 8px;
+  background: rgba(13, 16, 22, 0.97); backdrop-filter: blur(8px);
+  border: 1px solid var(--line); border-radius: 14px;
+  padding: 10px 12px 8px; margin-bottom: 14px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.45);
 }
+.draft-sticky .ds-row { display: flex; align-items: center; gap: 12px; }
+.draft-sticky .ds-onclock { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .draft-sticky .sticky-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
-.draft-sticky .sticky-onclock { font-size: 16px; font-weight: 800; color: var(--accent); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.draft-sticky .pick-clock { height: 40px; min-width: 56px; font-size: 20px; }
+.draft-sticky .sticky-onclock { font-size: 18px; font-weight: 800; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.draft-sticky .sticky-meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.draft-sticky .pick-clock { height: 44px; min-width: 64px; font-size: 22px; flex-shrink: 0; }
+.pick-ticker {
+  font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding: 5px 9px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line);
+}
+.pick-ticker b { color: var(--text); }
+.pick-ticker .pt-label {
+  font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;
+  color: #1a1206; background: var(--good); border-radius: 5px; padding: 1px 6px; margin-right: 6px;
+}
+
+/* Tab bar: big thumb targets, one tap to any draft-room section. */
+.draft-tabs { display: flex; gap: 6px; }
+.draft-tabs .dt {
+  flex: 1; position: relative; cursor: pointer;
+  background: var(--panel-2); color: var(--muted);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 4px; font-size: 13px; font-weight: 800; font-family: inherit;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.draft-tabs .dt.active { background: var(--accent-2); color: #06121f; border-color: transparent; }
+.draft-tabs .dt.alert:not(.active)::after {
+  content: ""; position: absolute; top: 6px; right: 8px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--accent); animation: clockpulse 1s infinite;
+}
+
+/* Tab panels: exactly one section on screen at a time. */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; animation: tabin 0.15s ease; }
+@keyframes tabin { from { opacity: 0.4; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.upcoming-strip { margin-bottom: 12px; }
+.you-badge {
+  font-size: 9px; font-weight: 900; letter-spacing: 0.5px; color: #06121f;
+  background: var(--good); border-radius: 5px; padding: 1px 5px; vertical-align: middle;
+}
+.db-cell.coach-cell .db-pick-no { color: var(--accent-2); font-weight: 800; }
 
 /* Coach cards on the draft board + coach rows in rosters/results. */
 .coach-row .player-meta .pname { color: var(--accent-2); }
@@ -134,16 +170,8 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .btn.ghost { background: transparent; }
 .btn.mini { padding: 6px 10px; font-size: 12px; }
 
-/* ---------------- Draft status ---------------- */
-.draft-status {
-  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-  background: var(--panel); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px;
-}
+/* ---------------- Draft status bits ---------------- */
 .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); display: block; }
-.onclock-name { font-size: 22px; font-weight: 800; color: var(--accent); }
-.onclock-meta { color: var(--muted); font-size: 13px; margin-left: 10px; }
-.upcoming { flex: 1; min-width: 220px; }
 .upcoming-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .up-chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 20px; padding: 4px 10px; font-size: 12px; color: var(--muted); }
 .up-chip b { color: var(--text); }
@@ -176,10 +204,8 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .tier-6 { background: #11141a; color: #6b7280; border: 1px solid var(--line); }
 
 /* ---------------- Draft board (picks in order, by team) ---------------- */
-.draftboard { margin-bottom: 16px; padding: 16px; }
-.section-title { margin: 0 0 12px; font-size: 16px; }
-.muted-inline { color: var(--muted); font-weight: 400; font-size: 13px; }
-.draft-board { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
+.draft-board { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+.draft-board .db-col { scroll-snap-align: start; }
 .db-col { flex: 0 0 150px; min-width: 150px; }
 .db-head { font-weight: 800; font-size: 13px; padding: 6px 8px; border-radius: 8px 8px 0 0; background: var(--panel-2); border: 1px solid var(--line); border-bottom: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .db-col.on-clock .db-head { background: var(--accent); color: #1a1206; }
@@ -203,17 +229,15 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .tn-rec { font-size: 13px; line-height: 1.45; background: rgba(74,163,255,0.08); border: 1px solid rgba(74,163,255,0.35); border-radius: 10px; padding: 9px 11px; }
 .tn-rec b { color: var(--accent-2); }
 
-/* ---------------- Draft layout ---------------- */
-.draft-layout { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
-@media (max-width: 920px) { .draft-layout { grid-template-columns: 1fr; } }
-
-.board-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.board-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 #search { flex: 1; min-width: 160px; }
 .pos-filters { display: flex; gap: 6px; flex-wrap: wrap; }
 .pos-filters .pf { padding: 6px 11px; border-radius: 18px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 700; }
 .pos-filters .pf.active { background: var(--accent-2); color: #06121f; border-color: transparent; }
 
-.player-list { display: flex; flex-direction: column; gap: 8px; max-height: 62vh; overflow-y: auto; padding-right: 6px; }
+/* The page itself scrolls (no nested scroll traps — critical on mobile); the
+   sticky header keeps the clock, status and tabs in view the whole way down. */
+.player-list { display: flex; flex-direction: column; gap: 8px; }
 
 .player-row {
   display: grid; grid-template-columns: 54px 1fr auto; gap: 12px; align-items: center;
@@ -283,14 +307,14 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .skill .bar { flex: 1; height: 6px; background: #11141a; border-radius: 4px; overflow: hidden; }
 .skill .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--good)); }
 
-/* ---------------- Legend ---------------- */
+/* ---------------- Legend (collapsed by default to save mobile space) --------- */
 .legend { font-size: 12px; color: var(--muted); line-height: 1.5; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin: 0 0 12px; }
 .legend b { color: var(--text); }
+.legend summary { cursor: pointer; font-weight: 700; color: var(--text); }
+.legend[open] summary { margin-bottom: 6px; }
 
 /* ---------------- Rosters ---------------- */
-.rosters-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; }
-.rosters-head h3 { margin: 0; }
-#all-rosters { display: flex; flex-direction: column; gap: 12px; max-height: 66vh; overflow-y: auto; padding-right: 4px; }
+#all-rosters { display: flex; flex-direction: column; gap: 12px; }
 .team-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.015); }
 .team-card.on-clock { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .team-card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
@@ -372,18 +396,39 @@ select:focus, input:focus { border-color: var(--accent-2); }
 
 /* ---------------- Mobile tuning ---------------- */
 @media (max-width: 600px) {
-  main { padding: 12px; }
-  .topbar { padding: 12px 16px; }
-  .brand h1 { font-size: 20px; }
-  .ball { font-size: 30px; }
+  main { padding: 10px; }
+  .topbar { padding: 10px 14px; }
+  .brand h1 { font-size: 19px; }
+  .tagline { display: none; }
+  .ball { font-size: 26px; }
   .card { padding: 14px; }
-  .draft-status { padding: 12px; gap: 12px; }
-  .onclock-name { font-size: 18px; }
-  .player-list { max-height: none; }
-  #all-rosters { max-height: none; }
-  .db-col { flex-basis: 132px; min-width: 132px; }
-  .player-row { grid-template-columns: 48px 1fr auto; gap: 10px; }
+
+  /* Draft-room header: edge-to-edge sticky bar, thumb-sized tabs. */
+  .draft-sticky { margin: -10px -10px 12px; border-radius: 0 0 14px 14px; border-top: none; padding: 8px 10px 8px; }
+  .draft-sticky .sticky-onclock { font-size: 16px; }
+  .draft-sticky .pick-clock { height: 40px; min-width: 58px; font-size: 20px; }
+  .draft-tabs .dt { padding: 11px 2px; font-size: 12.5px; }
+  .cap-status { font-size: 12px; padding: 5px 9px; }
+
+  .share-panel { padding: 10px 12px; }
+  .share-turn { font-size: 14px; }
+  .share-instr { font-size: 12px; }
+
+  .board-controls { gap: 8px; }
+  #search { min-width: 100%; }
+  .pos-filters { width: 100%; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .pos-filters .pf { flex-shrink: 0; padding: 8px 13px; }
+  #sort-by { width: 100%; }
+
+  .db-col { flex-basis: 136px; min-width: 136px; }
+  .player-row { grid-template-columns: 48px 1fr auto; gap: 10px; padding: 9px 10px; }
+  .player-meta .pname { font-size: 14px; }
+  .player-meta .psub { gap: 5px; font-size: 11px; }
   .ovr-badge { width: 40px; height: 40px; font-size: 15px; }
   .player-photo { width: 48px; height: 48px; }
   .player-photo .ph-initials { font-size: 16px; }
+  .btn.mini { padding: 9px 12px; } /* thumb-sized Draft/Hire buttons */
+
+  .res-stats { gap: 10px; }
+  .res-stat b { font-size: 16px; }
 }

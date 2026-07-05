@@ -51,6 +51,8 @@
     orderMode: "snake", // "snake" | "linear" | "random"
     draftOrder: null, // explicit pick order (persisted for random-order replay)
     turnGatePick: null, // (online) pickLog length for which the human pressed "Go"
+    activeTab: "players", // draft-room tab: "players" | "board" | "teams"
+    lastPickSeen: -1, // pickLog length at last render (drives snap-back-to-players)
     allowedEras: ["80s", "90s", "00s", "10s", "20s"],
   };
   const eraAllowed = (p) => (p.eras || []).some((d) => ui.allowedEras.includes(d));
@@ -488,7 +490,30 @@
   // ========================================================================
   //  DRAFT SCREEN
   // ========================================================================
+  // Draft-room tabs (Yahoo-style): Players / Board / Teams.
+  const DRAFT_TABS = [
+    ["players", "🏀 Players"],
+    ["board", "📋 Board"],
+    ["teams", "👥 Teams"],
+  ];
+  function setTab(key) {
+    ui.activeTab = key;
+    DRAFT_TABS.forEach(([k]) => $("#tab-" + k).classList.toggle("active", k === key));
+    $("#draft-tabs").querySelectorAll(".dt").forEach((b) => b.classList.toggle("active", b._tab === key));
+  }
+
   function buildDraftStaticUI() {
+    // Tab bar
+    const nav = $("#draft-tabs");
+    nav.innerHTML = "";
+    DRAFT_TABS.forEach(([key, label]) => {
+      const b = el("button", "dt" + (ui.activeTab === key ? " active" : ""), label);
+      b._tab = key;
+      b.onclick = () => setTab(key);
+      nav.appendChild(b);
+    });
+    setTab(ui.activeTab);
+
     // Position filter chips
     const pf = $("#pos-filters");
     pf.innerHTML = "";
@@ -544,6 +569,14 @@
     if (game.isComplete) {
       showResults();
       return;
+    }
+    // Yahoo-style snap-back: the moment a new pick puts a human (on this device)
+    // on the clock, jump to the Players tab so they can draft immediately.
+    const cur = game.currentManager();
+    if (game.pickLog.length !== ui.lastPickSeen) {
+      ui.lastPickSeen = game.pickLog.length;
+      const yourTurn = cur && !cur.isCpu && (!ui.live || myTurn());
+      if (yourTurn && ui.activeTab !== "players") setTab("players");
     }
     renderStatus();
     renderSharePanel();
@@ -817,16 +850,33 @@
 
   function renderStatus() {
     const m = game.currentManager();
-    $("#onclock-name").textContent = (m.isCpu ? "🤖 " : "") + m.name;
     $("#sticky-onclock").textContent = (m.isCpu ? "🤖 " : "") + m.name;
-    $("#onclock-meta").textContent =
-      `Round ${game.currentRound()} · Pick #${game.overallPickNumber()} of ${game.totalPicks}` +
-      (m.isCpu ? " · CPU drafting…" : "");
+    $("#sticky-meta").textContent =
+      `Rd ${game.currentRound()}/${game.picksPerManager} · Pick ${game.overallPickNumber()}/${game.totalPicks}` +
+      (m.isCpu ? " · CPU…" : "");
+
+    // Last-pick ticker (the draft-room "just selected" strip).
+    const ticker = $("#pick-ticker");
+    const last = game.pickLog[game.pickLog.length - 1];
+    if (last) {
+      const slotTxt = last.slot === "COACH" ? "🧠 COACH" : last.slot;
+      ticker.innerHTML =
+        `<span class="pt-label">Last pick</span> #${last.overall} <b>${last.player.name}</b> · ${slotTxt} → ${last.managerName}`;
+      ticker.classList.remove("hidden");
+    } else {
+      ticker.classList.add("hidden");
+    }
 
     const up = $("#upcoming-list");
     up.innerHTML = "";
-    game.upcoming(6).slice(1).forEach((p) => {
+    game.upcoming(8).slice(1).forEach((p) => {
       up.appendChild(el("span", "up-chip", `#${p.overall} <b>${p.manager.name}</b>`));
+    });
+
+    // Pulse the Players tab whenever a human on this device is on the clock.
+    const yourTurn = !m.isCpu && (!ui.live || myTurn());
+    $("#draft-tabs").querySelectorAll(".dt").forEach((b) => {
+      if (b._tab === "players") b.classList.toggle("alert", yourTurn);
     });
 
     const banner = $("#must-fill-banner");
@@ -1143,9 +1193,10 @@
           const ovr = isCoach ? `Coach ${e.player.overall}` : `${careerRating(e.player)} ovr`;
           const salPart = ui.capMode ? ` · $${salaryOf(e.player)}` : "";
           cell.innerHTML =
-            `<span class="db-pick-no">#${e.overall} · ${isCoach ? "🧠" : e.slot}</span>` +
+            `<span class="db-pick-no">#${e.overall} · ${isCoach ? "🧠 COACH" : e.slot}</span>` +
             `<span class="db-name">${e.player.name}</span>` +
             `<span class="db-sub">${ovr}${salPart}</span>`;
+          if (isCoach) cell.classList.add("coach-cell");
         } else {
           cell.innerHTML =
             `<span class="db-pick-no">R${rd}</span>` +
@@ -1238,13 +1289,20 @@
     wrap.innerHTML = "";
     const onClockId = game.isComplete ? -1 : game.currentManager().id;
 
-    game.managers.forEach((m) => {
+    // In a live room, pin YOUR team to the top so it's one tap to check.
+    const mgrs = game.managers.slice();
+    if (ui.live && ui.mySeat != null) {
+      mgrs.sort((a, b) => (a.id === ui.mySeat ? -1 : b.id === ui.mySeat ? 1 : a.id - b.id));
+    }
+
+    mgrs.forEach((m) => {
       const filled = SCORING.starterPlayers({ starters: m.starters, bench: [] }).length;
+      const isMe = ui.live && m.id === ui.mySeat;
       const card = el("div", "team-card" + (m.id === onClockId ? " on-clock" : ""));
 
       const head = el("div", "team-card-head");
       head.innerHTML =
-        `<span class="team-name">${m.isCpu ? "🤖 " : ""}${m.name}</span>` +
+        `<span class="team-name">${m.isCpu ? "🤖 " : ""}${m.name}${isMe ? ' <span class="you-badge">YOU</span>' : ""}</span>` +
         `<span class="team-fill">${filled}/5${m.id === onClockId ? " · on the clock" : ""}</span>`;
       card.appendChild(head);
 

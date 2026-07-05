@@ -39,11 +39,16 @@ No install, no backend, no internet required. Just open the page.
 
 ### Setup options
 
+- **Mobile-first draft room** — the draft screen is organized like a live
+  fantasy draft room: a **sticky header** with the pick clock, who's on the
+  clock, and a **last-pick ticker**, above three thumb-sized tabs —
+  **🏀 Players / 📋 Board / 👥 Teams**. The Players tab pulses when you're up
+  and the room snaps back to it the moment it's your turn; in a live room your
+  own team is pinned to the top of the Teams tab.
 - **Pick clock** — off, 0:30, 0:45, 1:00 (default), 1:30 or 2:00. When it hits
   zero the best available player is auto-drafted. In **online** drafts the clock
   doesn't start until you tap **Go** on the "It's your turn!" prompt, so a manager
   who isn't at their device the second their turn comes up isn't disadvantaged.
-  The clock also rides in a **sticky header** so it's always in view on mobile.
 - **Draft order** — **Snake** (1·2·3·4 then 4·3·2·1, default), **Linear**
   (1·2·3·4 every round), or **Random** (a fresh random pick order each round so no
   seat has a built-in advantage). Random orders are persisted so online/shared

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=19" />
+  <link rel="stylesheet" href="styles.css?v=20" />
 </head>
 <body>
   <header class="topbar">
@@ -124,28 +124,25 @@
 
     <!-- ============================== DRAFT SCREEN ============================== -->
     <section id="draft-screen" class="screen">
-      <!-- Sticky mini-bar: always-visible on-clock + pick clock (esp. on mobile). -->
+      <!-- Sticky draft-room header (Yahoo-style): clock + on-the-clock + last
+           pick + tab nav — everything you need, always in view, one thumb-tap
+           away from any section. -->
       <div id="draft-sticky" class="draft-sticky">
-        <span class="sticky-label">🏀 On the clock</span>
-        <span id="sticky-onclock" class="sticky-onclock">—</span>
-        <div id="pick-clock" class="pick-clock hidden"><span id="clock-time">1:00</span></div>
-      </div>
-
-      <div class="draft-status">
-        <div class="onclock">
-          <span class="label">On the clock</span>
-          <span id="onclock-name" class="onclock-name">—</span>
-          <span id="onclock-meta" class="onclock-meta"></span>
+        <div class="ds-row">
+          <div class="ds-onclock">
+            <span class="sticky-label">On the clock</span>
+            <span id="sticky-onclock" class="sticky-onclock">—</span>
+            <span id="sticky-meta" class="sticky-meta"></span>
+          </div>
+          <div id="pick-clock" class="pick-clock hidden"><span id="clock-time">1:00</span></div>
         </div>
-        <div class="upcoming">
-          <span class="label">Upcoming</span>
-          <div id="upcoming-list" class="upcoming-list"></div>
-        </div>
+        <div id="pick-ticker" class="pick-ticker hidden"></div>
         <div id="cap-status" class="cap-status hidden"></div>
         <div id="must-fill-banner" class="must-fill hidden"></div>
+        <nav id="draft-tabs" class="draft-tabs" aria-label="Draft sections"></nav>
       </div>
 
-      <!-- Online (share-a-link) relay panel -->
+      <!-- Online (share-a-link / live room) status -->
       <div id="share-panel" class="share-panel hidden">
         <div class="share-text">
           <span class="share-turn"></span>
@@ -154,43 +151,42 @@
         <button id="copy-link" class="btn primary">🔗 Copy link to send</button>
       </div>
 
-      <!-- Draft board: every pick, in order, by team (visible the whole draft) -->
-      <div class="draftboard card">
-        <h3 class="section-title">Draft board <span class="muted-inline">— all picks in order, by team</span></h3>
+      <!-- TAB: Players — the pick board -->
+      <div id="tab-players" class="tab-panel active">
+        <div id="team-needs" class="team-needs"></div>
+        <div class="board-controls">
+          <input id="search" type="text" placeholder="Search players…" />
+          <div class="pos-filters" id="pos-filters"></div>
+          <select id="sort-by">
+            <option value="career">Sort: Career rating</option>
+            <option value="fit">Sort: Fit for this team</option>
+            <option value="peak">Sort: Peak ability</option>
+            <option value="winner">Sort: Winner / playoff</option>
+            <option value="durable">Sort: Most durable</option>
+          </select>
+        </div>
+        <details class="legend">
+          <summary>What do Rating / Peak / Fit mean?</summary>
+          <b>Rating</b> = career build-around value (talent over a full 15-yr
+          career, lightly adjusted for longevity, durability &amp; intangibles).
+          <b>Peak</b> = best-self ability. <b>Fit</b> = how much this pick helps
+          <i>your</i> roster right now (rating + filling open needs − redundancy).
+        </details>
+        <div id="player-list" class="player-list"></div>
+      </div>
+
+      <!-- TAB: Draft board — every pick, in order, by team -->
+      <div id="tab-board" class="tab-panel">
+        <div class="upcoming-strip">
+          <span class="label">Upcoming</span>
+          <div id="upcoming-list" class="upcoming-list"></div>
+        </div>
         <div id="draft-board" class="draft-board"></div>
       </div>
 
-      <div class="draft-layout">
-        <!-- Player board -->
-        <div class="board card">
-          <div id="team-needs" class="team-needs"></div>
-          <div class="board-controls">
-            <input id="search" type="text" placeholder="Search players…" />
-            <div class="pos-filters" id="pos-filters"></div>
-            <select id="sort-by">
-              <option value="career">Sort: Career rating</option>
-              <option value="fit">Sort: Fit for this team</option>
-              <option value="peak">Sort: Peak ability</option>
-              <option value="winner">Sort: Winner / playoff</option>
-              <option value="durable">Sort: Most durable</option>
-            </select>
-          </div>
-          <p class="legend">
-            <b>Rating</b> = career build-around value (talent over a full 15-yr
-            career, lightly adjusted for longevity, durability & intangibles).
-            <b>Peak</b> = best-self ability. <b>Fit</b> = how much this pick helps
-            <i>your</i> roster right now (rating + filling open needs − redundancy).
-          </p>
-          <div id="player-list" class="player-list"></div>
-        </div>
-
-        <!-- All rosters, visible the whole draft -->
-        <aside class="rosters card">
-          <div class="rosters-head">
-            <h3>All rosters</h3>
-          </div>
-          <div id="all-rosters"></div>
-        </aside>
+      <!-- TAB: Teams — every roster -->
+      <div id="tab-teams" class="tab-panel">
+        <div id="all-rosters"></div>
       </div>
     </section>
 
@@ -244,13 +240,13 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=19"></script>
-  <script src="js/firebase-sync.js?v=19"></script>
+  <script src="js/firebase-config.js?v=20"></script>
+  <script src="js/firebase-sync.js?v=20"></script>
 
-  <script src="js/players.js?v=19"></script>
-  <script src="js/coaches.js?v=19"></script>
-  <script src="js/scoring.js?v=19"></script>
-  <script src="js/draft.js?v=19"></script>
-  <script src="js/app.js?v=19"></script>
+  <script src="js/players.js?v=20"></script>
+  <script src="js/coaches.js?v=20"></script>
+  <script src="js/scoring.js?v=20"></script>
+  <script src="js/draft.js?v=20"></script>
+  <script src="js/app.js?v=20"></script>
 </body>
 </html>
