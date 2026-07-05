@@ -873,8 +873,10 @@
       up.appendChild(el("span", "up-chip", `#${p.overall} <b>${p.manager.name}</b>`));
     });
 
-    // Pulse the Players tab whenever a human on this device is on the clock.
+    // Pulse the Players tab + light up the whole header whenever a human on
+    // this device is on the clock.
     const yourTurn = !m.isCpu && (!ui.live || myTurn());
+    $("#draft-sticky").classList.toggle("live-turn", yourTurn);
     $("#draft-tabs").querySelectorAll(".dt").forEach((b) => {
       if (b._tab === "players") b.classList.toggle("alert", yourTurn);
     });
@@ -1016,11 +1018,14 @@
     }
 
     const frag = document.createDocumentFragment();
+    let bestTagged = false; // marquee-highlight the top draftable name
     players.forEach((p) => {
       const affordable = !ui.capMode || canAfford(m, p);
       const canDraft = !cpuOnClock && !locked && game.canDraft(m, p) && affordable;
+      const isTop = !bestTagged && canDraft && !p.isCoach;
+      if (isTop) bestTagged = true;
 
-      const row = el("div", "player-row" + (p.isCoach ? " coach-row" : "") + (canDraft ? "" : " disabled"));
+      const row = el("div", "player-row" + (p.isCoach ? " coach-row" : "") + (isTop ? " top-pick" : "") + (canDraft ? "" : " disabled"));
       const photo = playerPhoto(p, p.isCoach ? p.overall : careerRating(p));
       const salTag = ui.capMode
         ? `<span class="tag salary${!affordable ? " unaffordable" : ""}" title="Salary (of a $${capAmount()} cap)">$${salaryOf(p)}</span>`
@@ -1044,7 +1049,7 @@
       } else {
         const fit = Math.round(bestFit(m, p));
         meta.innerHTML = `
-          <div class="pname">${tierBadge(p)} ${p.name} ${injuryDot(p.injuryRisk)}</div>
+          <div class="pname">${tierBadge(p)} ${p.name} ${injuryDot(p.injuryRisk)}${isTop ? '<span class="bap">⭐ Best available</span>' : ""}</div>
           <div class="psub">
             <span class="tag pos">${p.eligible.join("/")}</span>
             ${salTag}

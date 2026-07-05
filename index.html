@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=20" />
+  <link rel="stylesheet" href="styles.css?v=21" />
 </head>
 <body>
   <header class="topbar">
@@ -22,104 +22,122 @@
 
     <!-- ============================== SETUP SCREEN ============================== -->
     <section id="setup-screen" class="screen active">
-      <div class="card">
-        <h2>New Draft</h2>
-        <p class="muted">
-          Each manager drafts active NBA players in snake order (1→2→3…→3→2→1).
-          You're drafting their <b>whole career</b> — every pick starts over as a
-          rookie and plays a normalized 15-season arc. Fill every position
-          (PG / SG / SF / PF / C) with reasonable positional flexibility, then we
-          project each roster across those 15 seasons — career-peak talent, how
-          the game ages, injury risk, team fit, two-way defense, spacing, ball
-          dominance, winning pedigree and locker-room culture — to crown the best
-          analytical team.
+
+      <!-- Hero -->
+      <div class="hero">
+        <div class="hero-badge">🏀 Snake-Draft Dynasty Builder</div>
+        <h2 class="hero-title">Re-draft the NBA.<br /><span>Build a 15-year dynasty.</span></h2>
+        <p class="hero-sub">
+          Draft legends and today's stars <b>as rookies</b> — Jordan next to Wemby —
+          and let the analytics engine play out 15 full seasons of spacing, fit,
+          chemistry and clutch to crown the best-built team.
         </p>
-
-        <div class="field">
-          <label for="mode-select">Mode</label>
-          <select id="mode-select">
-            <option value="local">Local — pass &amp; play / vs CPU (one device)</option>
-            <option value="online">Online — each manager on their own device (share a link)</option>
-          </select>
-          <span class="hint" id="mode-hint">Everyone drafts on this device, taking turns. Tick 🤖 for CPU seats.</span>
+        <div class="hero-chips">
+          <span class="hchip">🕰️ 275+ players · 5 eras</span>
+          <span class="hchip">🧠 Draftable head coaches</span>
+          <span class="hchip">💰 Salary-cap twist</span>
+          <span class="hchip">📱 Live online rooms</span>
         </div>
-
-        <div class="field">
-          <label for="num-managers">Number of managers</label>
-          <select id="num-managers"></select>
+        <div class="hero-steps">
+          <div class="step"><b>1</b><span>Set up your draft room</span></div>
+          <div class="step"><b>2</b><span>Snake-draft your five (+ coach)</span></div>
+          <div class="step"><b>3</b><span>The engine crowns a dynasty</span></div>
         </div>
-
-        <div class="field">
-          <label for="clock-select">Pick clock</label>
-          <select id="clock-select">
-            <option value="0">No clock</option>
-            <option value="30">0:30</option>
-            <option value="45">0:45</option>
-            <option value="60" selected>1:00</option>
-            <option value="90">1:30</option>
-            <option value="120">2:00</option>
-          </select>
-          <span class="hint">When the clock hits zero, the best available player is auto-picked.</span>
-        </div>
-
-        <div class="field">
-          <label>Eras to include</label>
-          <div id="era-filters" class="era-filters"></div>
-          <span class="hint">Only players who starred in a checked decade are draftable.</span>
-        </div>
-
-        <div class="field">
-          <label for="order-select">Draft order</label>
-          <select id="order-select">
-            <option value="snake" selected>Snake — 1·2·3·4 then 4·3·2·1 (reverses each round)</option>
-            <option value="linear">Linear — 1·2·3·4 every round (same order each round)</option>
-            <option value="random">Random — a fresh random order each round (no fixed advantage)</option>
-          </select>
-          <span class="hint">Random reshuffles the pick order every round so no seat has a built-in edge.</span>
-        </div>
-
-        <div class="field">
-          <label for="posmode-select">Position rules</label>
-          <select id="posmode-select">
-            <option value="locked" selected>Locked — you assign each pick to a fixed open slot</option>
-            <option value="flexible">Flexible — draft freely; the lineup re-arranges (PG↔SG↔SF↔PF↔C) as long as a legal five remains</option>
-          </select>
-          <span class="hint">Flexible lets you take a second SG if he (or your current SG) can slide to an open, adjustable slot.</span>
-        </div>
-
-        <div class="field">
-          <label class="cap-toggle">
-            <input type="checkbox" id="coach-toggle" />
-            <span>🧠 Draft a head coach — each team also drafts one of the top 30 coaches since the ’80s, hireable at any point like a sixth position.</span>
-          </label>
-          <span class="hint">A great coach who fits your style (defensive coach + defensive team, run-and-gun + a fast team) lifts your cohesion; a mismatch doesn't.</span>
-        </div>
-
-        <div class="field">
-          <label class="cap-toggle">
-            <input type="checkbox" id="cap-toggle" />
-            <span>💰 Salary-cap mode — every player (and coach) costs salary on a steep curve, so you can't stack a Tier-1A roster.</span>
-          </label>
-        </div>
-
-        <div class="field hidden" id="cap-amount-field">
-          <label for="cap-amount">Salary cap</label>
-          <select id="cap-amount">
-            <option value="150">$150</option>
-            <option value="175">$175</option>
-            <option value="200" selected>$200</option>
-            <option value="225">$225</option>
-            <option value="250">$250</option>
-          </select>
-          <span class="hint">Defaults to $250 with a coach, $200 without — change it to tighten or loosen the squeeze.</span>
-        </div>
-
-        <p class="hint">Each manager drafts a starting five — PG, SG, SF, PF and C. No bench.</p>
-
-        <div id="manager-names" class="manager-names"></div>
-
-        <button id="start-draft" class="btn primary big">Start Draft</button>
       </div>
+
+      <!-- Setup, grouped into scannable cards -->
+      <div class="setup-grid">
+        <div class="setup-card span-all">
+          <h3 class="sc-title">🎮 Who's playing</h3>
+          <div class="sc-cols">
+            <div class="field">
+              <label for="mode-select">Mode</label>
+              <select id="mode-select">
+                <option value="local">Local — pass &amp; play / vs CPU (one device)</option>
+                <option value="online">Online — each manager on their own device (share a link)</option>
+              </select>
+              <span class="hint" id="mode-hint">Everyone drafts on this device, taking turns. Tick 🤖 for CPU seats.</span>
+            </div>
+            <div class="field">
+              <label for="num-managers">Number of managers</label>
+              <select id="num-managers"></select>
+              <span class="hint">Each manager drafts a starting five — PG, SG, SF, PF and C. No bench.</span>
+            </div>
+          </div>
+          <div id="manager-names" class="manager-names"></div>
+        </div>
+
+        <div class="setup-card">
+          <h3 class="sc-title">⏱️ Draft rules</h3>
+          <div class="field">
+            <label for="clock-select">Pick clock</label>
+            <select id="clock-select">
+              <option value="0">No clock</option>
+              <option value="30">0:30</option>
+              <option value="45">0:45</option>
+              <option value="60" selected>1:00</option>
+              <option value="90">1:30</option>
+              <option value="120">2:00</option>
+            </select>
+            <span class="hint">At zero, the best available player is auto-picked.</span>
+          </div>
+          <div class="field">
+            <label for="order-select">Draft order</label>
+            <select id="order-select">
+              <option value="snake" selected>Snake — 1·2·3·4 then 4·3·2·1</option>
+              <option value="linear">Linear — 1·2·3·4 every round</option>
+              <option value="random">Random — fresh order each round</option>
+            </select>
+            <span class="hint">Random reshuffles every round so no seat has a built-in edge.</span>
+          </div>
+          <div class="field">
+            <label for="posmode-select">Position rules</label>
+            <select id="posmode-select">
+              <option value="locked" selected>Locked — assign each pick to a fixed slot</option>
+              <option value="flexible">Flexible — lineup re-arranges to fit</option>
+            </select>
+            <span class="hint">Flexible lets you take a second SG if someone can slide (PG↔SG↔SF↔PF↔C).</span>
+          </div>
+        </div>
+
+        <div class="setup-card">
+          <h3 class="sc-title">🗓️ Player pool</h3>
+          <div class="field">
+            <label>Eras to include</label>
+            <div id="era-filters" class="era-filters"></div>
+            <span class="hint">Only players who starred in a checked decade are draftable — go all-time, or run a pure-’90s draft.</span>
+          </div>
+        </div>
+
+        <div class="setup-card">
+          <h3 class="sc-title">🌶️ Twists</h3>
+          <div class="field">
+            <label class="cap-toggle">
+              <input type="checkbox" id="coach-toggle" />
+              <span>🧠 <b>Draft a head coach</b> — the top 30 coaches since the ’80s, hireable at any point like a sixth position. Style fit matters.</span>
+            </label>
+          </div>
+          <div class="field">
+            <label class="cap-toggle">
+              <input type="checkbox" id="cap-toggle" />
+              <span>💰 <b>Salary-cap mode</b> — stars cost a fortune on a steep curve, so you can't stack a Tier-1A roster.</span>
+            </label>
+          </div>
+          <div class="field hidden" id="cap-amount-field">
+            <label for="cap-amount">Salary cap</label>
+            <select id="cap-amount">
+              <option value="150">$150</option>
+              <option value="175">$175</option>
+              <option value="200" selected>$200</option>
+              <option value="225">$225</option>
+              <option value="250">$250</option>
+            </select>
+            <span class="hint">Defaults to $250 with a coach, $200 without.</span>
+          </div>
+        </div>
+      </div>
+
+      <button id="start-draft" class="btn primary big start-cta">🏀 Start Draft</button>
     </section>
 
     <!-- ============================== DRAFT SCREEN ============================== -->
@@ -240,13 +258,13 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=20"></script>
-  <script src="js/firebase-sync.js?v=20"></script>
+  <script src="js/firebase-config.js?v=21"></script>
+  <script src="js/firebase-sync.js?v=21"></script>
 
-  <script src="js/players.js?v=20"></script>
-  <script src="js/coaches.js?v=20"></script>
-  <script src="js/scoring.js?v=20"></script>
-  <script src="js/draft.js?v=20"></script>
-  <script src="js/app.js?v=20"></script>
+  <script src="js/players.js?v=21"></script>
+  <script src="js/coaches.js?v=21"></script>
+  <script src="js/scoring.js?v=21"></script>
+  <script src="js/draft.js?v=21"></script>
+  <script src="js/app.js?v=21"></script>
 </body>
 </html>
