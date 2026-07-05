@@ -24,6 +24,9 @@
   const showScreen = (id) => {
     document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
     $(id).classList.add("active");
+    // Screen changes always start at the top — otherwise results (or a new
+    // screen) appear scrolled to wherever the previous screen left off.
+    if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
   };
 
   // ---- Game state --------------------------------------------------------
@@ -50,7 +53,8 @@
     coachMode: false, // draft a head coach (a sixth, anytime slot)
     orderMode: "snake", // "snake" | "linear" | "random"
     draftOrder: null, // explicit pick order (persisted for random-order replay)
-    turnGatePick: null, // (online) pickLog length for which the human pressed "Go"
+    turnGatePick: null, // pickLog length for which the on-clock human pressed "Go"
+    finalShown: false, // final-standings popup shown for this game
     activeTab: "players", // draft-room tab: "players" | "board" | "teams"
     lastPickSeen: -1, // pickLog length at last render (drives snap-back-to-players)
     allowedEras: ["80s", "90s", "00s", "10s", "20s"],
@@ -220,6 +224,7 @@
     ui.mySeat = null; // host chooses their (human) seat
     ui.cpuFlags = cpuFlags || [];
     ui.gameGen++;
+    ui.finalShown = false;
     rebuildGameFrom(names, [], ui.cpuFlags);
     initCpuProfiles();
     buildDraftStaticUI();
@@ -402,6 +407,7 @@
 
     ui.online = online;
     ui.gameGen++;
+    ui.finalShown = false;
     game = new DraftGame(names, {
       benchSize: 0, cpuFlags, posMode: ui.posMode, coachMode: ui.coachMode, orderMode: ui.orderMode,
     });
@@ -500,6 +506,8 @@
     ui.activeTab = key;
     DRAFT_TABS.forEach(([k]) => $("#tab-" + k).classList.toggle("active", k === key));
     $("#draft-tabs").querySelectorAll(".dt").forEach((b) => b.classList.toggle("active", b._tab === key));
+    // Each tab starts at the top (the sticky header stays in view regardless).
+    if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
   }
 
   function buildDraftStaticUI() {
@@ -607,10 +615,12 @@
     if (ui.clockSeconds <= 0 || game.isComplete) return;
     if (!ownsClock()) return;
     const m = game.currentManager();
-    // Online human turns: don't run the clock until the player hits "Go", so a
-    // manager who isn't at their device the moment their turn comes up isn't
-    // disadvantaged. CPU clocks (and local pass-and-play) start immediately.
-    if (ui.online && m && !m.isCpu) {
+    // EVERY human turn (local pass-and-play AND online) is gated behind an
+    // explicit "Go": the message tells you it's your turn, and the clock only
+    // starts once you acknowledge it — nobody's clock burns while the device
+    // changes hands or they're getting to their phone. CPU clocks start
+    // immediately.
+    if (m && !m.isCpu) {
       const atPick = game.pickLog.length;
       if (ui.turnGatePick === atPick) {
         startClock();
@@ -624,9 +634,11 @@
   function showTurnGate(atPick) {
     const modal = $("#turn-modal");
     const m = game.currentManager();
+    $("#turn-modal-title").textContent = `🟢 ${m ? m.name : "You"} — you're on the clock!`;
     $("#turn-modal-sub").innerHTML =
-      `You're <b>${m ? m.name : "up"}</b>. Your ${formatClock(ui.clockSeconds)} pick clock starts when you hit ` +
-      `<b>Go</b> — take your time getting here, it won't run until you're ready.`;
+      `Round ${game.currentRound()} · Pick #${game.overallPickNumber()}. Your ` +
+      `${formatClock(ui.clockSeconds)} pick clock starts when you hit <b>Go</b> — ` +
+      `it won't run until you're ready.`;
     $("#turn-go").onclick = () => {
       ui.turnGatePick = atPick;
       modal.classList.add("hidden");
@@ -769,7 +781,9 @@
       else if (seated) delay = 9000 + (ui.mySeat || 0) * 1500 + Math.random() * 1200; // backup
     } else if (ui.clockSeconds > 0 && !myTurn() && (ui.isHost || seated)) {
       // Backup only — the on-clock human's own device handles the normal expiry.
-      delay = (ui.clockSeconds + 6) * 1000 + (ui.mySeat || 0) * 1500 + Math.random() * 1200;
+      // Generous grace: their clock doesn't start until they hit "Go", so other
+      // devices wait clock + 2 minutes before covering a seemingly-gone player.
+      delay = (ui.clockSeconds + 120) * 1000 + (ui.mySeat || 0) * 1500 + Math.random() * 1200;
     }
     if (delay == null) return;
 
@@ -1361,6 +1375,13 @@
     renderResultsDetail(results);
     showScreen("#results-screen");
 
+    // Pop the final standings the moment the draft ends: who won, in what
+    // order, and (in a live room) where YOU finished.
+    if (!ui.finalShown) {
+      ui.finalShown = true;
+      showFinalModal(results);
+    }
+
     $("#share-results").onclick = () => {
       // A self-contained link (full draft encoded in the hash) that shows these
       // exact results to anyone who opens it — no room/Firebase needed to view.
@@ -1382,6 +1403,41 @@
       history.replaceState(null, "", location.pathname + location.search);
       location.reload();
     };
+  }
+
+  const ordinal = (n) => {
+    const s = ["th", "st", "nd", "rd"], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+
+  /** Quick end-of-game popup: champion + full ranking (+ your finish, live). */
+  function showFinalModal(results) {
+    const win = results[0];
+    $("#final-title").textContent = `🏆 ${win.manager.name} wins the dynasty!`;
+
+    const meIdx =
+      ui.live && ui.mySeat != null ? results.findIndex((r) => r.manager.id === ui.mySeat) : -1;
+    $("#final-sub").textContent =
+      meIdx >= 0
+        ? `You finished ${ordinal(meIdx + 1)} of ${results.length}. Final composite scores over the 15-year run:`
+        : `Final standings — composite scores over the 15-year run:`;
+
+    const wrap = $("#final-rankings");
+    wrap.innerHTML = "";
+    const medals = ["🥇", "🥈", "🥉"];
+    results.forEach((r, i) => {
+      const isMe = i === meIdx;
+      wrap.appendChild(el(
+        "div",
+        "fr-row" + (isMe ? " me" : ""),
+        `<span class="fr-rank">${medals[i] || "#" + (i + 1)}</span>
+         <span class="fr-name">${r.manager.isCpu ? "🤖 " : ""}${r.manager.name}${isMe ? ' <span class="you-badge">YOU</span>' : ""}</span>
+         <span class="fr-score">${Math.round(r.eval.composite)}</span>`
+      ));
+    });
+
+    $("#final-close").onclick = () => $("#final-modal").classList.add("hidden");
+    $("#final-modal").classList.remove("hidden");
   }
 
   function renderPodium(results) {

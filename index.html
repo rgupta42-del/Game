@@ -2,9 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1115" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=21" />
+  <link rel="stylesheet" href="styles.css?v=22" />
 </head>
 <body>
   <header class="topbar">
@@ -237,12 +240,22 @@
     </div>
   </div>
 
-  <!-- Turn gate (online): clock doesn't start until you hit Go. -->
+  <!-- Turn gate (all modes): the clock doesn't start until you hit Go. -->
   <div id="turn-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>🟢 It's your turn!</h3>
+      <h3 id="turn-modal-title">🟢 It's your turn!</h3>
       <p class="muted" id="turn-modal-sub">Your pick clock starts when you hit <b>Go</b>. Take your time getting here — the clock won't run until you're ready.</p>
       <button id="turn-go" class="btn primary big">Go — start my clock ▶</button>
+    </div>
+  </div>
+
+  <!-- Final standings: who won and where you finished, the moment it ends. -->
+  <div id="final-modal" class="modal hidden">
+    <div class="modal-card final-card">
+      <h3 id="final-title">🏆</h3>
+      <p class="muted" id="final-sub"></p>
+      <div id="final-rankings" class="final-rankings"></div>
+      <button id="final-close" class="btn primary big">See the full breakdown 📊</button>
     </div>
   </div>
 
@@ -258,13 +271,13 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=21"></script>
-  <script src="js/firebase-sync.js?v=21"></script>
+  <script src="js/firebase-config.js?v=22"></script>
+  <script src="js/firebase-sync.js?v=22"></script>
 
-  <script src="js/players.js?v=21"></script>
-  <script src="js/coaches.js?v=21"></script>
-  <script src="js/scoring.js?v=21"></script>
-  <script src="js/draft.js?v=21"></script>
-  <script src="js/app.js?v=21"></script>
+  <script src="js/players.js?v=22"></script>
+  <script src="js/coaches.js?v=22"></script>
+  <script src="js/scoring.js?v=22"></script>
+  <script src="js/draft.js?v=22"></script>
+  <script src="js/app.js?v=22"></script>
 </body>
 </html>

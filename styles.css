@@ -16,6 +16,10 @@
 
 * { box-sizing: border-box; }
 
+/* Nothing may push the page wider than the phone: any accidental overflow is
+   clipped instead of forcing a horizontal pan/zoom-out. */
+html { overflow-x: clip; }
+
 body {
   margin: 0;
   font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
@@ -447,6 +451,22 @@ select:focus, input:focus { border-color: var(--accent-2); }
   box-shadow: 0 0 42px rgba(255,107,53,0.35), var(--shadow);
 }
 #turn-modal h3 { font-size: 24px; margin: 4px 0 10px; }
+
+/* Final standings popup: champion + rankings the moment the draft ends. */
+#final-modal .modal-card {
+  border-color: #ffd54a; text-align: center;
+  box-shadow: 0 0 46px rgba(255,213,74,0.28), var(--shadow);
+}
+#final-modal h3 { font-size: 22px; margin: 4px 0 8px; }
+.final-rankings { display: grid; gap: 6px; margin: 14px 0 6px; text-align: left; max-height: 46vh; overflow-y: auto; }
+.fr-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px;
+}
+.fr-row.me { border-color: var(--good); box-shadow: 0 0 0 1px rgba(61,220,132,0.35); }
+.fr-rank { width: 36px; font-weight: 900; flex-shrink: 0; }
+.fr-name { flex: 1; font-weight: 700; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fr-score { font-weight: 900; color: var(--accent-2); }
 .slot-options { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
 .slot-options .so { flex: 1 1 80px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; text-align: center; font-weight: 800; }
 .slot-options .so:hover { border-color: var(--accent); color: var(--accent); }
@@ -532,10 +552,16 @@ select:focus, input:focus { border-color: var(--accent-2); }
   .share-turn { font-size: 14px; }
   .share-instr { font-size: 12px; }
 
+  /* iOS Safari auto-zooms into any focused input under 16px — which left the
+     whole page zoomed when the draft started. 16px stops the auto-zoom. */
+  select, input[type="text"] { font-size: 16px; }
+
   .board-controls { gap: 8px; }
   #search { min-width: 100%; }
-  .pos-filters { width: 100%; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
-  .pos-filters .pf { flex-shrink: 0; padding: 8px 13px; }
+  /* All position chips visible at once (wrapping) — no hidden side-scroll, so
+     SF/PF/C/COACH are never off-screen. */
+  .pos-filters { width: 100%; flex-wrap: wrap; }
+  .pos-filters .pf { padding: 8px 11px; font-size: 12px; }
   #sort-by { width: 100%; }
 
   .db-col { flex-basis: 136px; min-width: 136px; }
