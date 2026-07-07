@@ -49,10 +49,18 @@ No install, no backend, no internet required. Just open the page.
   zero the best available player is auto-drafted. In **online** drafts the clock
   doesn't start until you tap **Go** on the "It's your turn!" prompt, so a manager
   who isn't at their device the second their turn comes up isn't disadvantaged.
-- **Draft order** — **Snake** (1·2·3·4 then 4·3·2·1, default), **Linear**
-  (1·2·3·4 every round), or **Random** (a fresh random pick order each round so no
-  seat has a built-in advantage). Random orders are persisted so online/shared
-  links replay the exact same sequence for everyone.
+- **Draft type & order** — **Snake** (1·2·3·4 then 4·3·2·1, default), **Linear**
+  (1·2·3·4 every round), **Random** (a fresh random pick order each round so no
+  seat has a built-in advantage), or **🔨 Auction**. Random orders are persisted
+  so online/shared links replay the exact same sequence for everyone.
+- **Auction draft** — managers take turns *nominating*; anyone can bid **+$1**
+  or jump with a custom amount, and the hammer falls after 8 quiet seconds
+  ("going once… going twice…"). The nominated player's card shows their key
+  attributes and a **proposed value** (their curve salary normalized as a % of
+  your chosen cap). Salary-cap mode is **required** (you pick the amount; every
+  team must keep $1 per unfilled slot), CPU managers bid to their own private
+  valuations, the draft board shows the real hammer prices, and coaches go on
+  the block too. Local mode for now — online auctions are coming.
 - **Position rules** — **Locked** (you assign each pick to a fixed open slot) or
   **Flexible** (draft freely; the lineup automatically re-arranges across
   PG↔SG↔SF↔PF↔C as long as a legal starting five remains, so you can take a second
@@ -78,9 +86,16 @@ No install, no backend, no internet required. Just open the page.
   (low TS, high turnovers, questionable shot selection), be less efficient than the
   box score suggests — that's flagged post-finalization and modestly discounts the
   team's value.
-- **Online seat choice** — the manager who creates a live room now picks *which*
+- **Share first, draft second** — creating an online game immediately surfaces
+  the invite link in a share dialog *before* you pick a seat or anything goes on
+  the clock, so you can send it to your friends first.
+- **Online seat choice** — the manager who creates a live room picks *which*
   seat (and therefore which draft slot) they want, rather than being forced to
   pick first.
+- **2025-26 season baked in** — ratings reflect the Knicks' 2026 title (Brunson's
+  unanimous Finals MVP run), Wembanyama's unanimous DPOY + Finals trip, SGA's
+  back-to-back MVPs, Cade Cunningham's All-NBA leap, and the achilles wave
+  (Haliburton, Lillard, Tatum) in the injury model.
 
 ### Live online drafts (real-time)
 

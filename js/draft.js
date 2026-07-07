@@ -32,8 +32,13 @@ class DraftGame {
     this.benchSize = opts.benchSize ?? 2;
     this.posMode = opts.posMode === "flexible" ? "flexible" : "locked";
     this.coachMode = !!opts.coachMode;
+    // AUCTION mode: managers take turns NOMINATING (rotating in seat order) and
+    // anyone can win the player by bidding — roster slots fill in any order, so
+    // the snake order array is unused for ownership.
+    this.auction = !!opts.auction;
     this.orderMode = ["snake", "linear", "random"].includes(opts.orderMode) ? opts.orderMode : "snake";
     this.picksPerManager = STARTER_SLOTS.length + this.benchSize + (this.coachMode ? 1 : 0);
+    this._nomIdx = 0; // (auction) whose turn it is to nominate
     const cpuFlags = opts.cpuFlags ?? [];
 
     this.managers = managerNames.map((name, i) => {
@@ -88,13 +93,30 @@ class DraftGame {
     return this.order.length;
   }
 
+  /** Is this manager's roster fully assembled (starters + coach if enabled)? */
+  rosterComplete(m) {
+    return (
+      STARTER_SLOTS.every((s) => m.starters[s]) && (!this.coachMode || !!m.coach)
+    );
+  }
+
   get isComplete() {
+    if (this.auction) return this.managers.every((m) => this.rosterComplete(m));
     return this.currentPick >= this.totalPicks;
   }
 
-  /** Manager whose turn it is (or null if the draft is over). */
+  /** Manager whose turn it is (or null if the draft is over).
+   *  In auction mode this is the NOMINATOR (rotates, skipping full rosters). */
   currentManager() {
     if (this.isComplete) return null;
+    if (this.auction) {
+      const n = this.managers.length;
+      for (let i = 0; i < n; i++) {
+        const m = this.managers[(this._nomIdx + i) % n];
+        if (!this.rosterComplete(m)) return m;
+      }
+      return null;
+    }
     return this.managers[this.order[this.currentPick]];
   }
 
@@ -114,6 +136,7 @@ class DraftGame {
 
   /** How many picks this manager has remaining (including the current one). */
   picksRemainingFor(manager) {
+    if (this.auction) return this.unfilledRequiredSlots(manager).length;
     let count = 0;
     for (let i = this.currentPick; i < this.order.length; i++) {
       if (this.order[i] === manager.id) count++;
@@ -235,11 +258,17 @@ class DraftGame {
    * Execute a pick. `slot` must be one of legalSlotsFor(); if omitted, the first
    * legal slot is chosen automatically. In flexible mode `slot` is treated as a
    * preferred slot and the rest of the lineup may shuffle to accommodate it.
+   * `extra` (auction): { forId, price } — the WINNING manager (who may not be
+   * the nominator) and the hammer price.
    * @returns {object} the pick log entry
    */
-  draft(player, slot) {
-    const manager = this.currentManager();
+  draft(player, slot, extra) {
+    const manager =
+      this.auction && extra && extra.forId != null
+        ? this.managers[extra.forId]
+        : this.currentManager();
     if (!manager) throw new Error("Draft is already complete.");
+    this._price = extra && extra.price != null ? extra.price : null;
 
     // --- Head coach (any time) ---
     if (player.isCoach) {
@@ -317,15 +346,34 @@ class DraftGame {
       slot: chosen,
       round: this.currentRound(),
       overall: this.overallPickNumber(),
+      price: this._price != null ? this._price : undefined,
     };
+    this._price = null;
     this.pickLog.push(entry);
     this.currentPick++;
+    if (this.auction) this._advanceNomination();
     return entry;
+  }
+
+  /** (Auction) pass the nomination to the next seat, in seat order. */
+  _advanceNomination() {
+    this._nomIdx = (this._nomIdx + 1) % this.managers.length;
   }
 
   /** Upcoming pick order preview (next `count` picks). */
   upcoming(count = 6) {
     const out = [];
+    if (this.auction) {
+      // Upcoming NOMINATORS, skipping completed rosters.
+      const n = this.managers.length;
+      let overall = this.overallPickNumber();
+      for (let i = 0; i < n * 2 && out.length < count; i++) {
+        const m = this.managers[(this._nomIdx + i) % n];
+        if (this.rosterComplete(m)) continue;
+        out.push({ overall: overall++, round: this.currentRound(), manager: m });
+      }
+      return out;
+    }
     for (let i = this.currentPick; i < this.order.length && out.length < count; i++) {
       out.push({
         overall: i + 1,

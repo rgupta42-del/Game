@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=23" />
+  <link rel="stylesheet" href="styles.css?v=24" />
 </head>
 <body>
   <header class="topbar">
@@ -38,6 +38,7 @@
         <div class="hero-chips">
           <span class="hchip">🕰️ 275+ players · 5 eras</span>
           <span class="hchip">🧠 Draftable head coaches</span>
+          <span class="hchip">🔨 Snake or auction drafts</span>
           <span class="hchip">💰 Salary-cap twist</span>
           <span class="hchip">📱 Live online rooms</span>
         </div>
@@ -85,13 +86,14 @@
             <span class="hint">At zero, the best available player is auto-picked.</span>
           </div>
           <div class="field">
-            <label for="order-select">Draft order</label>
+            <label for="order-select">Draft type &amp; order</label>
             <select id="order-select">
               <option value="snake" selected>Snake — 1·2·3·4 then 4·3·2·1</option>
               <option value="linear">Linear — 1·2·3·4 every round</option>
               <option value="random">Random — fresh order each round</option>
+              <option value="auction">🔨 Auction — nominate &amp; bid for every player</option>
             </select>
-            <span class="hint">Random reshuffles every round so no seat has a built-in edge.</span>
+            <span class="hint" id="order-hint">Random reshuffles every round so no seat has a built-in edge. Auction: take turns nominating; anyone can win with the highest bid (salary-cap required).</span>
           </div>
           <div class="field">
             <label for="posmode-select">Position rules</label>
@@ -178,6 +180,8 @@
 
       <!-- TAB: Players — the pick board -->
       <div id="tab-players" class="tab-panel active">
+        <!-- Live auction block (auction drafts only) -->
+        <div id="auction-panel" class="auction-panel hidden"></div>
         <div id="team-needs" class="team-needs"></div>
         <div class="board-controls">
           <input id="search" type="text" placeholder="Search players…" />
@@ -253,6 +257,19 @@
     </div>
   </div>
 
+  <!-- Share-first gate: invite friends BEFORE joining/starting the draft. -->
+  <div id="sharegate-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>📨 Invite your friends first</h3>
+      <p class="muted">Send this link so everyone can join. Nothing moves until you continue — no clock is running.</p>
+      <div class="sharelink-row">
+        <input id="sharegate-link" type="text" readonly />
+        <button id="sharegate-copy" class="btn primary">Copy</button>
+      </div>
+      <button id="sharegate-continue" class="btn big">Continue ▶</button>
+    </div>
+  </div>
+
   <!-- Final standings: who won and where you finished, the moment it ends. -->
   <div id="final-modal" class="modal hidden">
     <div class="modal-card final-card">
@@ -275,13 +292,13 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=23"></script>
-  <script src="js/firebase-sync.js?v=23"></script>
+  <script src="js/firebase-config.js?v=24"></script>
+  <script src="js/firebase-sync.js?v=24"></script>
 
-  <script src="js/players.js?v=23"></script>
-  <script src="js/coaches.js?v=23"></script>
-  <script src="js/scoring.js?v=23"></script>
-  <script src="js/draft.js?v=23"></script>
-  <script src="js/app.js?v=23"></script>
+  <script src="js/players.js?v=24"></script>
+  <script src="js/coaches.js?v=24"></script>
+  <script src="js/scoring.js?v=24"></script>
+  <script src="js/draft.js?v=24"></script>
+  <script src="js/app.js?v=24"></script>
 </body>
 </html>

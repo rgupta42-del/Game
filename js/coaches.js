@@ -52,6 +52,42 @@
     ["saunders", "Flip Saunders",     80, { off: 86, def: 78, pace: 78, dev: 80, culture: 80 }, "Offense"],
   ];
 
+
+  // Verified Wikipedia/Wikimedia portraits (checked at build time; the UI
+  // falls back to an initials sprite if any image fails to load).
+  const COACH_PHOTOS = {
+    adelman: "https://upload.wikimedia.org/wikipedia/commons/0/05/Rick_Adelman.png",
+    bud: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/CMuwGzp.jpg/330px-CMuwGzp.jpg",
+    carlisle: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Rick_Carlisle_OPHS_Drive_and_Dish_Presser_2023-11-15_%28cropped2%29.jpg/330px-Rick_Carlisle_OPHS_Drive_and_Dish_Presser_2023-11-15_%28cropped2%29.jpg",
+    daly: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Chuck_Daly_%28cropped%29.jpg/330px-Chuck_Daly_%28cropped%29.jpg",
+    dantoni: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Mike_D%27Antoni_2010.jpg/330px-Mike_D%27Antoni_2010.jpg",
+    doc: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Rivers_76ers.jpg/330px-Rivers_76ers.jpg",
+    jvg: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/Jeff_Van_Gundy_%28cropped%29.jpg/330px-Jeff_Van_Gundy_%28cropped%29.jpg",
+    karl: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/George_Karl.jpg/330px-George_Karl.jpg",
+    kcjones: "https://upload.wikimedia.org/wikipedia/commons/4/46/K.C._Jones_-_Boston_celtics_1960_%28cropped%29.JPG",
+    kerr: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/58/Joe_Biden_Steph_Curry_Steve_Kerr_P20230117AS-1347_%28cropped%29_%28cropped%29.jpg/330px-Joe_Biden_Steph_Curry_Steve_Kerr_P20230117AS-1347_%28cropped%29_%28cropped%29.jpg",
+    lbrown: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Larry_Brown_2014.png/330px-Larry_Brown_2014.png",
+    lue: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Ty_Lue_Sideline_2022_%28cropped%29.jpg/330px-Ty_Lue_Sideline_2022_%28cropped%29.jpg",
+    mazzulla: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Celtics_at_Wizards_2024-12-046_%28cropped%29_%28cropped%29.jpg/330px-Celtics_at_Wizards_2024-12-046_%28cropped%29_%28cropped%29.jpg",
+    mbrown: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/Mike_Brown_NBA_cropped.jpg/330px-Mike_Brown_NBA_cropped.jpg",
+    mmalone: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Michael_Malone_2026.png/330px-Michael_Malone_2026.png",
+    monty: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Monty_Williams_%28cropped%29.jpg/330px-Monty_Williams_%28cropped%29.jpg",
+    nellie: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/Don_Nelson.jpg/330px-Don_Nelson.jpg",
+    nurse: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/76/1_nick_nurse_2026.jpg/330px-1_nick_nurse_2026.jpg",
+    phil: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fb/Phil_Jackson_Lipofsky_%28high_quality%29_%28cropped%29.JPG/330px-Phil_Jackson_Lipofsky_%28high_quality%29_%28cropped%29.JPG",
+    pop: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Gregg_Popovich_speaks_at_the_White_House_2015-01-12_%28cropped%29.jpg/330px-Gregg_Popovich_speaks_at_the_White_House_2015-01-12_%28cropped%29.jpg",
+    riley: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/Pat_Riley_speaks_at_Eglin_Air_Force_Base_%28cropped%29.jpg/330px-Pat_Riley_speaks_at_Eglin_Air_Force_Base_%28cropped%29.jpg",
+    saunders: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Flip_Saunders.jpg/330px-Flip_Saunders.jpg",
+    sloan: "https://upload.wikimedia.org/wikipedia/commons/a/a1/Jerry_Sloan_at_Energy_Solutions_Arena_%28cropped%29.jpg",
+    snyder: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/32/Head_Coach_Quin_Snyder.jpg/330px-Head_Coach_Quin_Snyder.jpg",
+    spo: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Erik_Spoelstra_2022_%28cropped%29.jpg/330px-Erik_Spoelstra_2022_%28cropped%29.jpg",
+    stevens: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Brad_Stevens_2017.jpg/330px-Brad_Stevens_2017.jpg",
+    svg: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Stan_Van_Gundy_Navy_Marine_Corps_Classic_2012_sports_commentators.jpg/330px-Stan_Van_Gundy_Navy_Marine_Corps_Classic_2012_sports_commentators.jpg",
+    thibs: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Tom_Thibodeau_-_52977484738_%28cropped%29.jpg/330px-Tom_Thibodeau_-_52977484738_%28cropped%29.jpg",
+    vogel: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Frank_Vogel_NBA_TV_%28cropped%29.jpeg/330px-Frank_Vogel_NBA_TV_%28cropped%29.jpeg",
+    wilkens: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Lenny_Wilkens_1968_%28cropped%29.jpeg/330px-Lenny_Wilkens_1968_%28cropped%29.jpeg",
+  };
+
   const COACH_POOL = RAW.map(([id, name, overall, traits, style]) => {
     const initials = name
       .replace(/[^A-Za-z .'-]/g, "")
@@ -61,7 +97,8 @@
       .join("")
       .slice(0, 3)
       .toUpperCase();
-    return { id: "coach_" + id, name, overall, traits, style, isCoach: true, eligible: ["COACH"], initials };
+    return { id: "coach_" + id, name, overall, traits, style, isCoach: true, eligible: ["COACH"], initials,
+      photo: COACH_PHOTOS[id] || null };
   });
 
   if (typeof module !== "undefined" && module.exports) module.exports = { COACH_POOL };

@@ -1228,9 +1228,99 @@ const PLAYER_POOL = [
     klove: 201567, amare: 2405, marion: 1890, drummond: 203083, aldridge: 200746, zbo: 2216,
     rondo: 200765, broy: 200786, arenas: 2240,
   };
+  // Verified Wikipedia/Wikimedia portraits for players without an NBA-CDN
+  // headshot (mostly pre-2000s legends + recent draftees). Every URL was
+  // checked at build time; a load failure still falls back to initials.
+  const WIKI_PHOTOS = {
+    aguirre: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/Mark_Aguirre_2007_%28cropped%29.jpg/330px-Mark_Aguirre_2007_%28cropped%29.jpg",
+    allanhouston: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/Allan_Houston_2010.jpg/330px-Allan_Houston_2010.jpg",
+    andrewtoney: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/58/Andrew_Toney_Philly_HOF.jpg/330px-Andrew_Toney_Philly_HOF.jpg",
+    artest: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Metta_World_Peace.jpg/330px-Metta_World_Peace.jpg",
+    arvydas: "https://upload.wikimedia.org/wikipedia/commons/3/38/Arvydas_Sabonis.jpg",
+    baron: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ee/Collision_2023_-_RCZ_0560_%2853008986428%29_%28cropped%29.jpg/330px-Collision_2023_-_RCZ_0560_%2853008986428%29_%28cropped%29.jpg",
+    benwallace: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Ben_Wallace_4104263221_%28cropped%29.jpg/330px-Ben_Wallace_4104263221_%28cropped%29.jpg",
+    bernardking: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Bernard_King.jpg/330px-Bernard_King.jpg",
+    bibby: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Mike_Bibby_Kings.jpg/330px-Mike_Bibby_Kings.jpg",
+    boozer: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Carlos_Boozer.jpg/330px-Carlos_Boozer.jpg",
+    buckwilliams: "https://upload.wikimedia.org/wikipedia/commons/5/53/Buck_Williams_-_Defense.gov_News_Photo_060406-N-0696M-015_%28cropped%29.jpg",
+    byronscott: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/Byron_Scott_%28cropped%29.jpg/330px-Byron_Scott_%28cropped%29.jpg",
+    cartwright: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/NBA_Champion_Bill_Cartwright_Celebrates_Launch_of_New_Book_at_College_of_DuPage_%2854292035685%29.jpg/330px-NBA_Champion_Bill_Cartwright_Celebrates_Launch_of_New_Book_at_College_of_DuPage_%2854292035685%29.jpg",
+    castle: "https://upload.wikimedia.org/wikipedia/commons/8/81/Stephon_Castle.jpg",
+    chambers: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Tom_Chambers_by_Gage_Skidmore.jpg/330px-Tom_Chambers_by_Gage_Skidmore.jpg",
+    cheeks: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/da/Maurice_Cheeks.jpg/330px-Maurice_Cheeks.jpg",
+    cliffrobinson: "https://upload.wikimedia.org/wikipedia/en/2/22/Cliff_Robinson_Survivor_Cagayan.jpg",
+    cwebb: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Chris_Webber_NBA_Asia_Challenge_2010.jpg/330px-Chris_Webber_NBA_Asia_Challenge_2010.jpg",
+    dantley: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Adrian_Dantley_%2838259978012%29_%28cropped%29.jpg/330px-Adrian_Dantley_%2838259978012%29_%28cropped%29.jpg",
+    davidwest: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/David_West_2011.jpg/330px-David_West_2011.jpg",
+    dennisj: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Dennis_Johnson_Lipofsky.jpg/330px-Dennis_Johnson_Lipofsky.jpg",
+    derekharper: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Derek_Harper_%289HFbKlxj1Es%29_%28cropped%29.png/330px-Derek_Harper_%289HFbKlxj1Es%29_%28cropped%29.png",
+    derrickcoleman: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Derrick_Coleman_2014.jpg/330px-Derrick_Coleman_2014.jpg",
+    divac: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Vlade_Divac_2016-mc.rs_%28cropped%29.jpg/330px-Vlade_Divac_2016-mc.rs_%28cropped%29.jpg",
+    dominique: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/76/Dominique_Wilkins_2022.jpg/330px-Dominique_Wilkins_2022.jpg",
+    drj: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Julius_Erving_2016.jpg/330px-Julius_Erving_2016.jpg",
+    dumars: "https://upload.wikimedia.org/wikipedia/commons/1/1f/Joe_Dumars.jpg",
+    edey: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Zach_Edey_2_%28cropped%29.jpg/330px-Zach_Edey_2_%28cropped%29.jpg",
+    eltonbrand: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/Elton_Brand_10.jpg/330px-Elton_Brand_10.jpg",
+    english: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Alex_English.jpg/330px-Alex_English.jpg",
+    francis: "https://upload.wikimedia.org/wikipedia/commons/1/17/Steve_Francis_cropped.jpg",
+    glenrice: "https://upload.wikimedia.org/wikipedia/commons/1/14/Glen_Rice_2010_%28cropped%29.jpg",
+    guswilliams: "https://upload.wikimedia.org/wikipedia/commons/2/20/Gus_Williams_1981.JPG",
+    horacegrant: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/Horace_Grant_%282014%29.jpg/330px-Horace_Grant_%282014%29.jpg",
+    hornacek: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Coach_Jeff_Hornacek_%28cropped%29.jpg/330px-Coach_Jeff_Hornacek_%28cropped%29.jpg",
+    isiah: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Isiah_Thomas_2007_%28cropped%29.jpg/330px-Isiah_Thomas_2007_%28cropped%29.jpg",
+    issel: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Dan_Issel_%281%29.jpeg/330px-Dan_Issel_%281%29.jpeg",
+    jamison: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0c/2019_Antawn_Jamison_%2848824316652%29_%28cropped%29.jpg/330px-2019_Antawn_Jamison_%2848824316652%29_%28cropped%29.jpg",
+    jermaine: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Jermaine_O%27Neal_smiling.jpg/330px-Jermaine_O%27Neal_smiling.jpg",
+    joejohnson: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Joe_Johnson_%2851902632002%29.jpg/330px-Joe_Johnson_%2851902632002%29.jpg",
+    jrich: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Jason_Richardson.jpg/330px-Jason_Richardson.jpg",
+    kareem: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Kareem_Abdul-Jabbar_May_2014.jpg/330px-Kareem_Abdul-Jabbar_May_2014.jpg",
+    kevinwillis: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/KevinWillisMichigan.jpg/330px-KevinWillisMichigan.jpg",
+    kiki: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Kiki_Vandeweghe.jpg/330px-Kiki_Vandeweghe.jpg",
+    kirilenko: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Andrei_Kirilenko_in_2024.jpg/330px-Andrei_Kirilenko_in_2024.jpg",
+    kukoc: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Toni_Kukoc_081423_cropped_%28cropped1%29.jpg/330px-Toni_Kukoc_081423_cropped_%28cropped1%29.jpg",
+    laimbeer: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Bill_Laimbeer_2_%28cropped%29.jpg/330px-Bill_Laimbeer_2_%28cropped%29.jpg",
+    larryjohnson: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Larry_Johnson_%28cropped%29.jpg/330px-Larry_Johnson_%28cropped%29.jpg",
+    larrynance: "https://upload.wikimedia.org/wikipedia/commons/2/26/Larry_Nance_-_Phoenix_Suns.jpg",
+    majerle: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Dan_Majerle_GCU_%28cropped%29.JPG/330px-Dan_Majerle_GCU_%28cropped%29.JPG",
+    marbury: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Stephon_Marbury_%40_Amazon_Fishbowl_2.jpg/330px-Stephon_Marbury_%40_Amazon_Fishbowl_2.jpg",
+    markjackson: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Mark_Jackson_2013_%28cropped%29.jpg/330px-Mark_Jackson_2013_%28cropped%29.jpg",
+    markprice: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Mark_Price_%28cropped%29.jpg/330px-Mark_Price_%28cropped%29.jpg",
+    marquesj: "https://upload.wikimedia.org/wikipedia/commons/f/f8/Marques_johnson_ucla.JPG",
+    mchale: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Kevin_McHale_2012_press_conference_-_headshot.jpg/330px-Kevin_McHale_2012_press_conference_-_headshot.jpg",
+    mitchrichmond: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Mitch_Richmond_cropped.jpg/330px-Mitch_Richmond_cropped.jpg",
+    moncrief: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Sidney_Moncrief_2015.jpg/330px-Sidney_Moncrief_2015.jpg",
+    moses: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Moses_Malone_cropped_portrait.jpg/330px-Moses_Malone_cropped_portrait.jpg",
+    mullin: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Chris_Mullin.jpg/330px-Chris_Mullin.jpg",
+    okur: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Mehmet_Okur_%28cropped%29.jpg/330px-Mehmet_Okur_%28cropped%29.jpg",
+    otisthorpe: "https://upload.wikimedia.org/wikipedia/commons/9/95/Otis_Thorpe_1986-87.jpg",
+    parish: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Robert_Parish.jpg/330px-Robert_Parish.jpg",
+    penny: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/HBCUAllstarBasketball4223-118_%2852802377149%29_%28cropped%29.jpg/330px-HBCUAllstarBasketball4223-118_%2852802377149%29_%28cropped%29.jpg",
+    redd: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/ReddBucks.jpg/330px-ReddBucks.jpg",
+    ricksmits: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/RikSmits_headshot.jpg/330px-RikSmits_headshot.jpg",
+    riphamilton: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/Richard_Hamilton_180422-D-SW162-1588_%2827762040388%29_%28cropped%29.jpg/330px-Richard_Hamilton_180422-D-SW162-1588_%2827762040388%29_%28cropped%29.jpg",
+    risacher: "https://upload.wikimedia.org/wikipedia/commons/9/9f/Zaccharie_Risacher_All_Star_Game_%28cropped%29.jpg",
+    rodman: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Dennis_Rodman_02_%2834649289162%29_%28cropped%29.jpg/330px-Dennis_Rodman_02_%2834649289162%29_%28cropped%29.jpg",
+    samcassell: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/Wizards_Assistant_Coach_Sam_Cassell_%28cropped%29.jpg/330px-Wizards_Assistant_Coach_Sam_Cassell_%28cropped%29.jpg",
+    sarr: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/2025_Washington_Wizards_Media_Day_13.jpg/330px-2025_Washington_Wizards_Media_Day_13.jpg",
+    schrempf: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Detlef_Schrempf_at_NBA_All-Star_Center_Court_2016_%2824742228990%29.jpg/330px-Detlef_Schrempf_at_NBA_All-Star_Center_Court_2016_%2824742228990%29.jpg",
+    scoot: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Scoot_Henderson_2024_%28cropped2%29.jpg/330px-Scoot_Henderson_2024_%28cropped2%29.jpg",
+    shawnkemp: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Shawn_Kemp_%289523772347%29_%28cropped%29.jpg/330px-Shawn_Kemp_%289523772347%29_%28cropped%29.jpg",
+    sikma: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Jack_Sikma_IWU.jpg/330px-Jack_Sikma_IWU.jpg",
+    tayshaun: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/Tayshaun_Prince.jpg/330px-Tayshaun_Prince.jpg",
+    terryporter: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Terry_Porter.jpg/330px-Terry_Porter.jpg",
+    timhardaway: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/20150902_Quest_Multisport_clinic_Tim_Hardaway_%281%29.JPG/330px-20150902_Quest_Multisport_clinic_Tim_Hardaway_%281%29.JPG",
+    tysonchandler: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Tyson_Chandler_March_2012.jpg/330px-Tyson_Chandler_March_2012.jpg",
+    vanexel: "https://upload.wikimedia.org/wikipedia/commons/d/d2/Nick_Van_Exel_free_throw.jpg",
+    walterdavis: "https://upload.wikimedia.org/wikipedia/commons/c/c4/Walter_Davis_-_Phoenix_Suns.jpg",
+    worthy: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/James_Worthy_at_UNC_Basketball_game._February_10%2C_2007.jpg/330px-James_Worthy_at_UNC_Basketball_game._February_10%2C_2007.jpg",
+    zydrunas: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Zydrunas_Ilgauskas_Cavaliers.jpg/330px-Zydrunas_Ilgauskas_Cavaliers.jpg",
+  };
+
   PLAYER_POOL.forEach((p) => {
     if (NBA_IDS[p.id]) {
       p.photo = "https://cdn.nba.com/headshots/nba/latest/260x190/" + NBA_IDS[p.id] + ".png";
+    } else if (WIKI_PHOTOS[p.id]) {
+      p.photo = WIKI_PHOTOS[p.id];
     }
     // Initials shown when there's no photo (or it fails to load).
     p.initials = p.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
@@ -1285,6 +1375,62 @@ const PLAYER_POOL = [
       ? LEGACY[p.id]
       : clamp(Math.round(p.career.winning * 0.5 + p.career.elevates * 0.15 + 18), 32, 80);
   });
+
+  // --------------------------------------------------------------------------
+  //  2025-26 SEASON + 2026 PLAYOFFS UPDATE
+  //
+  //  Knicks win the 2026 title (first since 1973); Jalen Brunson is the
+  //  unanimous Finals MVP after a historically clutch run (45 in the clincher).
+  //  Wembanyama: unanimous DPOY, All-NBA 1st team, carried the Spurs to the
+  //  Finals at 22 while staying healthy (64 games post-clot). SGA: back-to-back
+  //  MVP, OKC 64-18. All-NBA 1st team: SGA, Wemby, Cade, Luka, Jokić.
+  //  Haliburton missed the season (torn achilles, June 2025); Tatum returned
+  //  from his May-2025 achilles; Lillard/Kyrie recovering from 2025 tears.
+  // --------------------------------------------------------------------------
+  const byId = {};
+  PLAYER_POOL.forEach((p) => (byId[p.id] = p));
+  const up = (id, fn) => byId[id] && fn(byId[id]);
+
+  // NBA champions + unanimous Finals MVP: proven ring-carrying alpha.
+  up("brunson", (p) => { p.career.winning = Math.max(p.career.winning, 92); p.ext.clutch = 98; p.legacy = Math.max(p.legacy, 82); });
+  up("kat", (p) => { p.career.winning = Math.max(p.career.winning, 84); p.legacy = Math.max(p.legacy, 76); p.ext.clutch = Math.max(p.ext.clutch, 74); });
+  up("anunoby", (p) => { p.career.winning = Math.max(p.career.winning, 84); p.ext.clutch = Math.max(p.ext.clutch || 70, 82); p.legacy = Math.max(p.legacy, 70); });
+  up("mbridges", (p) => { p.career.winning = Math.max(p.career.winning, 80); p.legacy = Math.max(p.legacy, 64); });
+
+  // Unanimous DPOY + All-NBA 1st + a Finals run at 22 — and the injury story
+  // (blood clot) now has a healthy 64-game season behind it.
+  up("wemby", (p) => {
+    p.injuryRisk = clamp(p.injuryRisk - 8, 5, 95);
+    p.career.winning = Math.max(p.career.winning, 84);
+    p.legacy = Math.max(p.legacy, 78);
+    p.ext.clutch = Math.max(p.ext.clutch, 84);
+  });
+
+  // Back-to-back MVP, 64-18: inner-circle resume keeps growing.
+  up("sga", (p) => { p.legacy = Math.max(p.legacy, 88); p.career.winning = Math.max(p.career.winning, 92); });
+
+  // All-NBA 1st team leap: a true franchise engine now, and the efficiency
+  // profile matured with it.
+  up("cade", (p) => {
+    p.ratings.scoring = Math.max(p.ratings.scoring, 90);
+    p.ratings.playmaking = Math.max(p.ratings.playmaking, 92);
+    p.ext.efficiency = Math.max(p.ext.efficiency, 76);
+    p.ext.turnovers = Math.min(p.ext.turnovers, 54);
+    p.legacy = Math.max(p.legacy, 72);
+    p.career.winning = Math.max(p.career.winning, 80);
+  });
+
+  // DPOY finalists.
+  up("chet", (p) => { p.career.winning = Math.max(p.career.winning, 84); });
+  up("ausar", (p) => { p.ratings.perimeterD = Math.max(p.ratings.perimeterD, 92); p.ext.steals = Math.max(p.ext.steals, 90); });
+
+  // Achilles/knee reality check: Haliburton lost the whole 2025-26 season;
+  // Lillard and Kyrie are working back from 2025 tears; Tatum returned but the
+  // arc carries risk now.
+  up("halliburton", (p) => { p.injuryRisk = clamp(p.injuryRisk + 16, 5, 95); });
+  up("dlillard", (p) => { p.injuryRisk = clamp(p.injuryRisk + 10, 5, 95); });
+  up("kyrie", (p) => { p.injuryRisk = clamp(p.injuryRisk + 8, 5, 95); });
+  up("tatum", (p) => { p.injuryRisk = clamp(p.injuryRisk + 8, 5, 95); });
 })();
 
 // Make available both as a module export and on the global scope (browser).
