@@ -207,9 +207,25 @@ function careerRating(player) {
   // SPACING IMPACT: a ball-dominant non-shooter shrinks the floor for everyone.
   const spacingImpact = c.ballDominance >= 80 && r.shooting < 80 ? (80 - r.shooting) * 0.06 + 1 : 0;
 
+  // UNFINISHED-CAREER DISCOUNT: an active player's rating is part projection,
+  // and projections can miss. Scale the haircut by (a) how much career remains,
+  // (b) how much résumé is already BANKED — accolades / status if the career
+  // ended today (legacy) — and (c) injury exposure across the remaining years.
+  // A finished legend (Shaq: titles with multiple teams, sustained production,
+  // fully proven) takes zero discount. A 22-year-old unicorn (Wemby) is still
+  // mostly forecast — elite, but he shouldn't out-rank completed greatness. A
+  // two-time MVP champion (SGA, Jokić) has already banked a Hall-of-Fame case,
+  // so the discount barely touches him.
+  const completion = clamp((player.age - 20) / 15, 0, 1); // ~rookie → 15 seasons
+  const remaining = 1 - completion;
+  const banked = clamp(((player.legacy != null ? player.legacy : 60) - 40) / 55, 0, 1);
+  const projectionRisk = remaining * (1 - banked * 0.8) * 5.5;
+  const injuryExposure = remaining * (Math.max(0, player.injuryRisk - 30) / 100) * 4;
+  const unfinishedDiscount = Math.min(6, projectionRisk + injuryExposure);
+
   const val =
     peak * 0.82 + peak * longevity * 0.13 + intangibleNudge + dominanceBonus +
-    legacyBonus + eraAdj - spacingImpact;
+    legacyBonus + eraAdj - spacingImpact - unfinishedDiscount;
   const result = clamp(Math.round(val), 0, 99);
   _careerCache.set(player.id, result);
   return result;

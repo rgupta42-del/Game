@@ -1398,11 +1398,13 @@ const PLAYER_POOL = [
   up("mbridges", (p) => { p.career.winning = Math.max(p.career.winning, 80); p.legacy = Math.max(p.legacy, 64); });
 
   // Unanimous DPOY + All-NBA 1st + a Finals run at 22 — and the injury story
-  // (blood clot) now has a healthy 64-game season behind it.
+  // (blood clot) now has a healthy 64-game season behind it. Legacy stays
+  // moderate: if his career ended today it's a brilliant start, not a
+  // legendary résumé — the unfinished-career discount leans on this.
   up("wemby", (p) => {
     p.injuryRisk = clamp(p.injuryRisk - 8, 5, 95);
     p.career.winning = Math.max(p.career.winning, 84);
-    p.legacy = Math.max(p.legacy, 78);
+    p.legacy = Math.max(p.legacy, 72);
     p.ext.clutch = Math.max(p.ext.clutch, 84);
   });
 

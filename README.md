@@ -145,6 +145,7 @@ Three pillars drive a player's value, with **talent doing most of the work**:
 | **Peak ability** | Position-aware overall from a career-peak skill profile. Rewards elite top-end skills and on-ball creation, **but two-way defense (incl. steals & blocks) is talent too** — so a one-way scorer has a lower ceiling than an equally-skilled two-way player. Inner-circle stars land in the 90s. |
 | **Career arc** | A rookie→year-15 curve, shaped per player by `earlyImpact` (great right away?) and `aging` (does the game age well — skill/IQ players sustain, athleticism-reliant ones fade). |
 | **Durability** | `injuryRisk` is a *moderate* career discount, not a gutting — a fragile former-MVP (Embiid) still rates well above an excellent role player, because you'd still build around the talent. |
+| **Career completion** | Active players carry an **unfinished-career discount**: the rating is part projection, so it's trimmed by how much career remains, how little résumé is *banked* (accolades / status if it ended today), and injury exposure over the remaining years. Shaq (multiple titles across teams, fully proven) outranks Wembanyama (still mostly forecast, already injured once) even at comparable talent — while a two-time-MVP champion like SGA or Jokić has banked a Hall-of-Fame case and is barely touched. |
 
 The headline **Career rating** is talent-dominant, lightly boosted for longevity
 (graceful aging + durability) and lifted by floor-raising (`elevates`) and by

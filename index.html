@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=24" />
+  <link rel="stylesheet" href="styles.css?v=25" />
 </head>
 <body>
   <header class="topbar">
@@ -198,6 +198,10 @@
           <summary>What do Rating / Peak / Fit mean?</summary>
           <b>Rating</b> = career build-around value (talent over a full 15-yr
           career, lightly adjusted for longevity, durability &amp; intangibles).
+          Active players carry an <b>unfinished-career discount</b> — the less
+          they've played and banked (accolades, titles, status if it ended
+          today), and the higher their remaining injury risk, the bigger the
+          haircut — so a completed legend outranks an equal-talent projection.
           <b>Peak</b> = best-self ability. <b>Fit</b> = how much this pick helps
           <i>your</i> roster right now (rating + filling open needs − redundancy).
         </details>
@@ -292,13 +296,13 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=24"></script>
-  <script src="js/firebase-sync.js?v=24"></script>
+  <script src="js/firebase-config.js?v=25"></script>
+  <script src="js/firebase-sync.js?v=25"></script>
 
-  <script src="js/players.js?v=24"></script>
-  <script src="js/coaches.js?v=24"></script>
-  <script src="js/scoring.js?v=24"></script>
-  <script src="js/draft.js?v=24"></script>
-  <script src="js/app.js?v=24"></script>
+  <script src="js/players.js?v=25"></script>
+  <script src="js/coaches.js?v=25"></script>
+  <script src="js/scoring.js?v=25"></script>
+  <script src="js/draft.js?v=25"></script>
+  <script src="js/app.js?v=25"></script>
 </body>
 </html>
