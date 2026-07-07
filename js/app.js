@@ -54,6 +54,10 @@
     orderMode: "snake", // "snake" | "linear" | "random"
     auctionMode: false, // auction draft (nominate + bid); forces salary cap
     auction: null, // live auction state: { pid, bid, leaderId, deadline, timer }
+    challenge: "none", // "none" | "nostars" | "daily60"
+    chalSeed: null, // date seed for daily60 (travels in links/rooms)
+    queue: [], // player ids starred by THIS device (auto-pick prefers these)
+    lastReactKey: null, // newest reaction already animated (live rooms)
     draftOrder: null, // explicit pick order (persisted for random-order replay)
     turnGatePick: null, // pickLog length for which the on-clock human pressed "Go"
     finalShown: false, // final-standings popup shown for this game
@@ -63,6 +67,37 @@
     allowedEras: ["80s", "90s", "00s", "10s", "20s"],
   };
   const eraAllowed = (p) => (p.eras || []).some((d) => ui.allowedEras.includes(d));
+
+  // ---- Challenge modes -----------------------------------------------------
+  let _dailySet = null; // cached Set of ids for the current daily60 seed
+  function dailySet() {
+    if (_dailySet) return _dailySet;
+    const seed = ui.chalSeed || new Date().toISOString().slice(0, 10);
+    const rnd = POSTSEASON.mulberry32(POSTSEASON.hashStr("daily60·" + seed));
+    // Seeded shuffle, then take 60 while guaranteeing position coverage.
+    const pool = PLAYER_POOL.slice();
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const set = new Set();
+    STARTER_SLOTS.forEach((pos) => {
+      pool.filter((p) => p.eligible.includes(pos)).slice(0, 10).forEach((p) => set.add(p.id));
+    });
+    for (const p of pool) {
+      if (set.size >= 60) break;
+      set.add(p.id);
+    }
+    _dailySet = set;
+    return set;
+  }
+  /** Era filter + challenge-mode filter, applied everywhere the pool is read. */
+  function poolAllowed(p) {
+    if (!eraAllowed(p)) return false;
+    if (ui.challenge === "nostars") return SCORING.careerRating(p) <= 85;
+    if (ui.challenge === "daily60") return dailySet().has(p.id);
+    return true;
+  }
   const salaryOf = (p) => (p.isCoach ? SCORING.coachSalary(p) : SCORING.salaryValue(p));
   // Chosen cap, defaulting to $250 with coaches / $200 without.
   const capAmount = () => ui.capChoice || (ui.coachMode ? SCORING.SALARY_CAP_WITH_COACH : SCORING.SALARY_CAP);
@@ -161,6 +196,14 @@
     $("#order-select").addEventListener("change", syncCapUI);
     $("#cap-amount").addEventListener("change", () => { capTouched = true; });
     syncCapUI();
+
+    // Sound: browsers require a user gesture before audio — unlock on the
+    // first tap anywhere. The 🔊 toggle persists across sessions.
+    document.addEventListener("click", () => SFX.unlock(), { once: true });
+    const muteBtn = $("#mute-btn");
+    const paintMute = () => (muteBtn.textContent = SFX.muted ? "🔇" : "🔊");
+    muteBtn.addEventListener("click", () => { SFX.toggle(); paintMute(); });
+    paintMute();
   }
 
   // ---- Online state (share-a-link relay) ---------------------------------
@@ -300,6 +343,7 @@
     if (Array.isArray(data.cpu)) ui.cpuFlags = data.cpu.map(Boolean);
     ui.gameGen++; // invalidate any pending timers
     rebuildGameFrom(names, picks, ui.cpuFlags);
+    syncLiveAuction(data.auction || null);
 
     if (!ui.staticBuilt) {
       buildDraftStaticUI();
@@ -314,7 +358,12 @@
     } else {
       showScreen("#draft-screen");
       renderDraft();
+      if (ui.auction && ui.auction.live) {
+        startLiveAuctionTicker();
+        hostDriveAuctionCpus();
+      }
     }
+    handleReactions(data);
   }
 
   function showSeatModal(names, takenSeats) {
@@ -413,7 +462,7 @@
   /** Ensure the chosen eras leave enough players to fill every position. */
   function validateEraPool(numManagers) {
     for (const pos of STARTER_SLOTS) {
-      const n = PLAYER_POOL.filter((p) => eraAllowed(p) && p.eligible.includes(pos)).length;
+      const n = PLAYER_POOL.filter((p) => poolAllowed(p) && p.eligible.includes(pos)).length;
       if (n < numManagers) {
         return `Not enough ${pos}s in the selected eras (${n}) for ${numManagers} managers. Pick more decades.`;
       }
@@ -438,12 +487,15 @@
     if (ui.auctionMode) {
       ui.capMode = true; // auctions REQUIRE a salary cap
       if (!ui.capChoice) ui.capChoice = ui.coachMode ? 250 : 200;
-      if (online) {
-        return alert("🔨 Auction drafts are local-only for now — pick Local mode (pass & play / vs CPU) to run an auction. Online auctions are coming.");
+      if (online && !liveAvailable()) {
+        return alert("🔨 Online auctions need real-time sync (Firebase) — the shareable-link relay can't run live bidding. Configure Firebase (see FIREBASE_SETUP.md) or run a Local auction.");
       }
     }
     ui.allowedEras = Array.from($("#era-filters").querySelectorAll("input:checked")).map((c) => c.value);
     if (ui.allowedEras.length === 0) return alert("Select at least one era.");
+    ui.challenge = $("#challenge-select").value || "none";
+    ui.chalSeed = ui.challenge === "daily60" ? new Date().toISOString().slice(0, 10) : null;
+    _dailySet = null; // recompute for this game's seed
     const eraErr = validateEraPool(names.length);
     if (eraErr) return alert(eraErr);
 
@@ -464,6 +516,7 @@
     ui.gameGen++;
     ui.finalShown = false;
     ui.auction = null;
+    ui.queue = [];
     game = new DraftGame(names, {
       benchSize: 0, cpuFlags, posMode: ui.posMode, coachMode: ui.coachMode, orderMode: ui.orderMode,
       auction: ui.auctionMode,
@@ -491,6 +544,8 @@
       coach: ui.coachMode,
       order: ui.orderMode,
       auction: ui.auctionMode,
+      chal: ui.challenge,
+      chalSeed: ui.chalSeed,
     };
     // Random order isn't reproducible from the mode alone — carry the actual
     // pick order so every device/replay sees the same sequence.
@@ -507,6 +562,8 @@
     if (cfg.coach != null) ui.coachMode = cfg.coach;
     if (cfg.order != null) ui.orderMode = cfg.order;
     if (cfg.auction != null) ui.auctionMode = cfg.auction;
+    if (cfg.chal != null) { ui.challenge = cfg.chal; _dailySet = null; }
+    if (cfg.chalSeed != null) { ui.chalSeed = cfg.chalSeed; _dailySet = null; }
     if (Array.isArray(cfg.seatOrder)) ui.draftOrder = cfg.seatOrder;
   }
 
@@ -660,6 +717,7 @@
     renderSharePanel();
     renderDraftBoard();
     renderTeamNeeds();
+    renderQueueStrip();
     renderPlayerList();
     renderAllRosters();
     renderAuctionPanel();
@@ -719,6 +777,7 @@
     t.classList.remove("hidden", "show");
     void (t.offsetWidth || 0); // restart the slide-in animation
     t.classList.add("show");
+    SFX.play(entry.price != null ? "sold" : "pick");
     clearTimeout(ui._toastTimer);
     ui._toastTimer = setTimeout(() => t.classList.add("hidden"), 3000);
   }
@@ -741,6 +800,7 @@
       if (hasClock) startClock();
     };
     modal.classList.remove("hidden");
+    SFX.play("yourturn");
   }
   const formatClock = (s) => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
   function startClock() {
@@ -752,8 +812,10 @@
       if (gen !== ui.gameGen) return clearInterval(ui.clockTimer);
       ui.clockRemaining -= 1;
       updateClockDisplay();
+      if (ui.clockRemaining > 0 && ui.clockRemaining <= 10) SFX.play("tick");
       if (ui.clockRemaining <= 0) {
         clearInterval(ui.clockTimer);
+        SFX.play("buzzer");
         const cur = game.currentManager();
         // CPU turns are handled by scheduleCpuPick; only auto-pick for a human
         // who has let their clock expire.
@@ -773,6 +835,19 @@
   }
   /** Best available pick for a manager (used by clock auto-pick and failover). */
   function bestAvailablePick(manager) {
+    // Queue first: if THIS device's manager starred players, take the first
+    // queued player who's still available and legal (never applies when a
+    // backup device is covering someone else's turn).
+    const queueApplies = !manager.isCpu && (!ui.live || manager.id === ui.mySeat);
+    if (queueApplies && ui.queue.length) {
+      for (const id of ui.queue) {
+        const p = findDraftable(id);
+        if (p && !p.isCoach && isDraftable(manager, p) && game.legalSlotsFor(manager, p).length) {
+          const ss = game.legalSlotsFor(manager, p).filter((s) => s !== "BENCH");
+          if (ss.length) return { player: p, slot: ss.includes(p.pos) ? p.pos : ss[0] };
+        }
+      }
+    }
     const avail = PLAYER_POOL.filter((p) => isDraftable(manager, p));
     if (avail.length) {
       avail.sort(
@@ -832,6 +907,12 @@
     const bidders = eligibleBidders(player);
     if (!bidders.length) return;
     const opener = nom && canBid(nom, player) ? nom : bidders[0];
+    if (ui.live) {
+      // The room record is the single source of truth; everyone (including us)
+      // picks the lot up from the room echo.
+      FBSync.setAuction(ui.roomId, { pid: player.id, bid: 1, leaderId: opener.id, ts: Date.now() });
+      return;
+    }
     ui.auction = { pid: player.id, bid: 1, leaderId: opener.id, gen: ui.gameGen, vals: {}, deadline: AUCTION_GRACE, timer: null };
     armAuctionClock();
     if (ui.auction) scheduleAuctionCpus();
@@ -906,8 +987,13 @@
     amount = Math.floor(amount);
     if (!m || !p || m.id === a.leaderId) return;
     if (!(amount > a.bid) || !canBid(m, p) || amount > maxBid(m)) return;
+    if (a.live) {
+      FBSync.bidAuction(ui.roomId, a.pid, amount, mgrId); // echo updates everyone
+      return;
+    }
     a.bid = amount;
     a.leaderId = m.id;
+    SFX.play("bid");
     armAuctionClock();
     if (ui.auction) {
       scheduleAuctionCpus();
@@ -979,7 +1065,8 @@
     game.managers.forEach((m) => {
       if (game.rosterComplete(m)) return;
       const leading = m.id === a.leaderId;
-      const able = canBid(m, p) && !leading && maxBid(m) >= a.bid + 1;
+      const able =
+        canBid(m, p) && !leading && maxBid(m) >= a.bid + 1 && (!ui.live || m.id === ui.mySeat);
       const row = el("div", "au-row" + (leading ? " leading" : ""));
       const nameCol = el(
         "div",
@@ -1022,9 +1109,129 @@
     if (!a) return;
     const c = $("#auction-panel").querySelector(".au-clock");
     if (!c) return;
-    const s = Math.max(0, a.deadline | 0);
+    const s = Math.max(0, (a.live ? auctionSecondsLeft() : a.deadline) | 0);
     c.textContent = s > 4 ? `⏳ ${s}s` : s > 2 ? "going once…" : s > 0 ? "going twice…" : "SOLD!";
     c.classList.toggle("warn", s <= 4);
+  }
+
+  // ---- Live (Firebase) auctions: room state drives every device -----------
+  function auctionSecondsLeft() {
+    const a = ui.auction;
+    return a ? Math.ceil(AUCTION_GRACE - (Date.now() - a.ts) / 1000) : 0;
+  }
+  /** Adopt the room's auction state (or clear it). Called on every room echo. */
+  function syncLiveAuction(remote) {
+    if (!ui.live || !game.auction) return;
+    if (!remote || !game.isAvailable(remote.pid)) {
+      if (ui.auction && ui.auction.live) {
+        ui.auction = null;
+        if (ui._auTimer) clearInterval(ui._auTimer);
+      }
+      // A lot left behind for an already-sold player: host tidies up.
+      if (remote && !game.isAvailable(remote.pid) && ui.isHost) FBSync.clearAuction(ui.roomId);
+      return;
+    }
+    const prev = ui.auction && ui.auction.pid === remote.pid ? ui.auction : null;
+    if (prev && remote.bid > prev.bid) SFX.play("bid");
+    ui.auction = {
+      pid: remote.pid,
+      bid: remote.bid,
+      leaderId: remote.leaderId,
+      ts: remote.ts || Date.now(),
+      deadline: AUCTION_GRACE,
+      gen: ui.gameGen,
+      live: true,
+      vals: prev ? prev.vals : {},
+    };
+  }
+  /** Countdown + hammer. Host is the timekeeper; seated devices back it up. */
+  function startLiveAuctionTicker() {
+    if (ui._auTimer) clearInterval(ui._auTimer);
+    ui._auTimer = setInterval(() => {
+      const a = ui.auction;
+      if (!a || !a.live) return clearInterval(ui._auTimer);
+      updateAuctionClock();
+      const graceExtra = ui.isHost ? 0 : 6 + (ui.mySeat || 0) * 2;
+      if (auctionSecondsLeft() <= -graceExtra && (ui.isHost || ui.mySeat != null)) {
+        clearInterval(ui._auTimer);
+        liveSell();
+      }
+    }, 500);
+  }
+  function liveSell() {
+    const a = ui.auction;
+    if (!a) return;
+    ui.auction = null;
+    const p = findDraftable(a.pid);
+    const winner = game.managers[a.leaderId];
+    if (!p || !winner) return;
+    const slots = game.legalSlotsFor(winner, p).filter((s) => s !== "BENCH");
+    const slot = p.isCoach ? "COACH" : slots.includes(p.pos) ? p.pos : slots[0];
+    // The transaction guarantees exactly one device commits the sale.
+    FBSync.appendPickIf(ui.roomId, game.pickLog.length, [a.pid, slot, a.bid, a.leaderId]).then(
+      (committed) => { if (committed) FBSync.clearAuction(ui.roomId); }
+    );
+  }
+  /** Host schedules CPU bids against the live lot (writes via transaction). */
+  function hostDriveAuctionCpus() {
+    const a = ui.auction;
+    if (!a || !a.live || !ui.isHost) return;
+    const p = findDraftable(a.pid);
+    game.managers.forEach((m) => {
+      if (!m.isCpu || m.id === a.leaderId || !canBid(m, p)) return;
+      const val = a.vals[m.id] != null ? a.vals[m.id] : (a.vals[m.id] = cpuValuation(m, p));
+      if (val < a.bid + 1) return;
+      setTimeout(() => {
+        const cur = ui.auction;
+        if (!cur || !cur.live || cur.pid !== a.pid || cur.leaderId === m.id) return;
+        const v = cur.vals[m.id] != null ? cur.vals[m.id] : val;
+        if (v < cur.bid + 1 || maxBid(m) < cur.bid + 1) return;
+        FBSync.bidAuction(ui.roomId, cur.pid, Math.min(v, cur.bid + 1 + Math.floor(Math.random() * 2)), m.id);
+      }, 600 + Math.random() * 1100);
+    });
+  }
+
+  // ---- Live-room emoji reactions ------------------------------------------
+  const REACTIONS = ["🔥", "😂", "🗑️", "😱", "💪", "🥶"];
+  function renderReactBar() {
+    const bar = $("#react-bar");
+    if (!ui.live || ui.mySeat == null) {
+      bar.classList.add("hidden");
+      return;
+    }
+    if (!bar.children.length) {
+      REACTIONS.forEach((emo) => {
+        const b = el("button", "react-btn", emo);
+        b.onclick = () => FBSync.react(ui.roomId, ui.mySeat, emo);
+        bar.appendChild(b);
+      });
+    }
+    bar.classList.remove("hidden");
+  }
+  function handleReactions(data) {
+    const rx = data && data.reactions;
+    if (!rx) return;
+    const keys = Object.keys(rx).sort();
+    if (!keys.length) return;
+    if (ui.lastReactKey == null) {
+      ui.lastReactKey = keys[keys.length - 1]; // don't replay history on join
+      return;
+    }
+    keys.forEach((k) => {
+      if (k <= ui.lastReactKey) return;
+      ui.lastReactKey = k;
+      const v = rx[k];
+      const seat = v[0];
+      floatEmoji(v[1], game.managers[seat] ? game.managers[seat].name : "");
+    });
+  }
+  function floatEmoji(emoji, who) {
+    const body = document.body;
+    if (!body || typeof body.appendChild !== "function") return;
+    const e = el("div", "emoji-float", `${emoji}<span>${who}</span>`);
+    e.style.left = 12 + Math.random() * 72 + "%";
+    body.appendChild(e);
+    setTimeout(() => e.remove(), 2600);
   }
 
   /** The online banner: live room status (your turn / waiting) or relay link. */
@@ -1050,7 +1257,9 @@
         : `⏳ Waiting for <b>${m.name}</b> to pick${youAre}`;
       instrEl.textContent =
         "Live room — picks sync in real time. Share this link once so each manager can join on their own device.";
+      renderReactBar();
     } else {
+      $("#react-bar").classList.add("hidden");
       copyBtn.textContent = "🔗 Copy link to send";
       turnEl.innerHTML = `🔗 It's <b>${m.name}</b>'s turn`;
       instrEl.textContent =
@@ -1110,6 +1319,21 @@
     const atPick = game.pickLog.length;
     const myRoom = ui.roomId;
     const seated = ui.mySeat != null;
+
+    // Live AUCTION: turns are nominations. The host opens the bidding for CPU
+    // nominators; human nominations come from their own device (no expiry).
+    if (game.auction) {
+      if (ui.auction || !m.isCpu || !ui.isHost) return;
+      setTimeout(() => {
+        if (ui.roomId !== myRoom || !game || game.isComplete || ui.auction) return;
+        if (game.pickLog.length !== atPick) return;
+        const cur = game.currentManager();
+        if (!cur || !cur.isCpu) return;
+        const choice = cpuChoose(cur);
+        if (choice) openAuction(choice.player);
+      }, 1500 + Math.random() * 1500);
+      return;
+    }
 
     let delay = null;
     if (m.isCpu) {
@@ -1273,7 +1497,7 @@
   // available coaches when coaches are enabled and this manager hasn't hired one
   // (coaches can be drafted at any time, like a sixth position).
   function availablePlayers() {
-    let list = PLAYER_POOL.filter((p) => game.isAvailable(p.id) && eraAllowed(p));
+    let list = PLAYER_POOL.filter((p) => game.isAvailable(p.id) && poolAllowed(p));
     const m = game.currentManager();
     if (ui.coachMode && m && game.needsCoach(m) && typeof COACH_POOL !== "undefined") {
       list = list.concat(COACH_POOL.filter((c) => game.isAvailable(c.id)));
@@ -1285,7 +1509,7 @@
   function minAvailableSalary() {
     let min = Infinity;
     for (const p of PLAYER_POOL) {
-      if (!game.isAvailable(p.id) || !eraAllowed(p)) continue;
+      if (!game.isAvailable(p.id) || !poolAllowed(p)) continue;
       const s = salaryOf(p);
       if (s < min) min = s;
     }
@@ -1319,7 +1543,7 @@
   // Auction: NOMINATABLE if anyone in the room could legally bid on them (the
   // nominator doesn't have to be able to afford their own nomination).
   function isDraftable(manager, player) {
-    const eraOk = player.isCoach || eraAllowed(player); // coaches aren't era-gated
+    const eraOk = player.isCoach || poolAllowed(player); // coaches aren't era/challenge-gated
     if (game.auction) {
       return game.isAvailable(player.id) && eraOk && eligibleBidders(player).length > 0;
     }
@@ -1364,6 +1588,36 @@
     const starters = SCORING.starterPlayers({ starters: manager.starters, bench: [] });
     const adj = starters.length ? SCORING.coachAdjust(starters, coach).delta : 0;
     return coach.overall + adj * 1.5; // pedigree, lifted/dragged by style fit
+  }
+
+  // ---- Pick queue (watchlist): star players; auto-pick drafts from it ------
+  function toggleQueue(pid) {
+    const i = ui.queue.indexOf(pid);
+    if (i >= 0) ui.queue.splice(i, 1);
+    else ui.queue.push(pid);
+    renderQueueStrip();
+    renderPlayerList();
+  }
+  function renderQueueStrip() {
+    const strip = $("#queue-strip");
+    const ids = ui.queue.filter((id) => game.isAvailable(id));
+    ui.queue = ids; // prune drafted players
+    if (!ids.length) {
+      strip.classList.add("hidden");
+      strip.innerHTML = "";
+      return;
+    }
+    strip.classList.remove("hidden");
+    strip.innerHTML = "";
+    strip.appendChild(el("span", "qs-label", "⭐ My queue"));
+    ids.forEach((id, i) => {
+      const p = findDraftable(id);
+      if (!p) return;
+      const chip = el("span", "qs-chip", `${i + 1}. ${p.name} <b class="qs-x">✕</b>`);
+      chip.onclick = () => toggleQueue(id);
+      strip.appendChild(chip);
+    });
+    strip.appendChild(el("span", "qs-hint", "clock expiry drafts from your queue first"));
   }
 
   function renderPlayerList() {
@@ -1427,6 +1681,14 @@
       }
 
       const actions = el("div", "player-actions");
+      // Star/queue toggle (players only; any human can plan ahead).
+      if (!p.isCoach && !cpuOnClock) {
+        const inQ = ui.queue.includes(p.id);
+        const star = el("button", "btn ghost mini star-btn" + (inQ ? " on" : ""), inQ ? "★" : "☆");
+        star.title = inQ ? "Remove from my queue" : "Add to my queue (auto-pick priority)";
+        star.onclick = () => toggleQueue(p.id);
+        actions.appendChild(star);
+      }
       if (canDraft) {
         const label = game.auction ? "Nominate 🔨" : p.isCoach ? "Hire" : "Draft";
         const btn = el("button", "btn primary mini", label);
@@ -1743,7 +2005,10 @@
     results.sort((a, b) => b.eval.composite - a.eval.composite);
 
     renderPodium(results);
+    renderBracket(results, false);
+    renderDraftGrades();
     renderResultsDetail(results);
+    initLegendsUI(results);
     showScreen("#results-screen");
 
     // Pop the final standings the moment the draft ends: who won, in what
@@ -1774,6 +2039,147 @@
       history.replaceState(null, "", location.pathname + location.search);
       location.reload();
     };
+  }
+
+  // ========================================================================
+  //  POSTSEASON THEATER: bracket finale, draft grades, legend gauntlet
+  // ========================================================================
+  const draftSeedString = () => game.pickLog.map((e) => e.player.id).join("|");
+  const profileOf = (r) =>
+    POSTSEASON.teamProfile(
+      (r.manager.isCpu ? "🤖 " : "") + r.manager.name,
+      { starters: r.manager.starters, bench: [], coach: r.manager.coach },
+      r.eval
+    );
+
+  /** Simulated playoff bracket among the drafted teams (seeded by record). */
+  function renderBracket(results, reroll) {
+    const wrap = $("#playoff-bracket");
+    if (results.length < 2) { wrap.innerHTML = ""; return; }
+    const profiles = results.slice().sort((a, b) => b.eval.avgWins - a.eval.avgWins).map(profileOf);
+    const seed = reroll ? "reroll·" + Math.random() : draftSeedString();
+    const br = POSTSEASON.simBracket(profiles, seed);
+    const R = br.rounds.length;
+    const roundName = (i) => {
+      const left = R - i;
+      return left === 1 ? "🏆 Finals" : left === 2 ? "Semifinals" : "First round";
+    };
+    const roundsHtml = br.rounds
+      .map((series, i) => {
+        const cards = series
+          .map((s) => {
+            if (s.bye) return `<div class="bk-series bye"><b>${s.winner}</b> — first-round bye</div>`;
+            const log = s.games
+              .map((g) => `<div class="bk-game">G${g.g}: <b>${g.winner}</b>${g.close ? " (nail-biter)" : ""} — ${g.star} ${g.pts} pts</div>`)
+              .join("");
+            return `<div class="bk-series${i === R - 1 ? " finals" : ""}">
+              <div class="bk-line">${s.teamA} vs ${s.teamB}</div>
+              <div class="bk-win">→ <b>${s.winner}</b> ${s.score}</div>
+              <details class="bk-log"><summary>game log</summary>${log}</details>
+            </div>`;
+          })
+          .join("");
+        return `<div class="bk-round"><div class="bk-round-name">${roundName(i)}</div>${cards}</div>`;
+      })
+      .join("");
+    wrap.innerHTML =
+      `<div class="res-subhead">Simulated postseason — seeded by projected record (upsets happen!)</div>` +
+      `<div class="bk-rounds">${roundsHtml}</div>` +
+      `<div class="bk-champ">🏆 <b>${br.champion.name}</b> wins the simulated title · Finals MVP: <b>${br.mvp}</b></div>`;
+    const resim = el("button", "btn mini", "🎲 Re-simulate the bracket");
+    resim.onclick = () => renderBracket(results, true);
+    wrap.appendChild(resim);
+  }
+
+  /** Grade every pick vs value/draft position (price-aware in auctions). */
+  let _gradeById = null;
+  function renderDraftGrades() {
+    const wrap = $("#draft-grades");
+    _gradeById = new Map();
+    const picks = game.pickLog.filter((e) => !e.player.isCoach);
+    if (picks.length < 4) { wrap.innerHTML = ""; return; }
+    const byRating = picks.slice().sort((a, b) => careerRating(b.player) - careerRating(a.player));
+    const rank = new Map(byRating.map((e, i) => [e.player.id, i]));
+    const n = picks.length;
+    const graded = picks.map((e, idx) => {
+      let score = idx - rank.get(e.player.id); // positive = value fell to you
+      if (game.auction) {
+        const fair = proposedValue(e.player);
+        score += ((fair - (e.price || fair)) / Math.max(4, fair)) * (n / 6);
+      }
+      const z = score / Math.max(3, n / 4);
+      const letter =
+        z >= 1 ? "A+" : z >= 0.6 ? "A" : z >= 0.3 ? "A-" : z >= 0.12 ? "B+" :
+        z >= -0.12 ? "B" : z >= -0.3 ? "C+" : z >= -0.6 ? "C" : z >= -1 ? "D" : "F";
+      _gradeById.set(e.player.id, letter);
+      return { e, score, letter };
+    });
+    const steal = graded.slice().sort((a, b) => b.score - a.score)[0];
+    const reach = graded.slice().sort((a, b) => a.score - b.score)[0];
+    const priceTag = (e) => (game.auction && e.price != null ? ` ($${e.price})` : "");
+    const GPA = { "A+": 4.3, A: 4, "A-": 3.7, "B+": 3.3, B: 3, "C+": 2.3, C: 2, D: 1, F: 0 };
+    const teams = game.managers
+      .map((m) => {
+        const g = graded.filter((x) => x.e.managerId === m.id);
+        return { m, gpa: g.length ? g.reduce((s, x) => s + GPA[x.letter], 0) / g.length : 0 };
+      })
+      .sort((a, b) => b.gpa - a.gpa);
+    wrap.innerHTML =
+      `<div class="res-subhead">Draft grades</div>` +
+      `<div class="dg-callout good">💎 <b>Steal of the draft:</b> ${steal.e.player.name} — pick #${steal.e.overall} by ${steal.e.managerName}${priceTag(steal.e)}</div>` +
+      (reach.score < -1
+        ? `<div class="dg-callout bad">🚨 <b>Biggest reach:</b> ${reach.e.player.name} — pick #${reach.e.overall} by ${reach.e.managerName}${priceTag(reach.e)}</div>`
+        : "") +
+      `<div class="dg-teams">${teams
+        .map((t, i) => `<span class="dg-team">${i === 0 ? "🎓 " : ""}${t.m.isCpu ? "🤖 " : ""}${t.m.name} <b>${t.gpa.toFixed(1)} GPA</b></span>`)
+        .join("")}</div>`;
+  }
+
+  /** Legend gauntlet: your drafted team vs an all-decade super-team. */
+  function initLegendsUI(results) {
+    $("#challenge-legends").onclick = () => openLegends(results);
+    $("#legends-close").onclick = () => $("#legends-modal").classList.add("hidden");
+  }
+  function openLegends(results) {
+    const opts = $("#legends-options");
+    opts.innerHTML = "";
+    const teamSel = el("select", "lg-select");
+    results.forEach((r, i) => {
+      const o = el("option", null, `${r.manager.isCpu ? "🤖 " : ""}${r.manager.name}`);
+      o.value = String(i);
+      teamSel.appendChild(o);
+    });
+    opts.appendChild(el("div", "lg-label", "Your team"));
+    opts.appendChild(teamSel);
+    opts.appendChild(el("div", "lg-label", "Pick a legend squad"));
+    const grid = el("div", "lg-grid");
+    POSTSEASON.LEGEND_SQUADS.forEach((sq) => {
+      const b = el("button", "btn mini lg-squad", `${sq.emoji} ${sq.name}`);
+      b.onclick = () => runLegendSeries(results[parseInt(teamSel.value, 10) || 0], sq);
+      grid.appendChild(b);
+    });
+    opts.appendChild(grid);
+    $("#legends-result").innerHTML = "";
+    $("#legends-modal").classList.remove("hidden");
+  }
+  function runLegendSeries(r, sq) {
+    const mine = profileOf(r);
+    const roster = POSTSEASON.legendRoster(sq);
+    const legends = POSTSEASON.teamProfile(`${sq.emoji} ${sq.name}`, roster, evaluateRoster(roster));
+    const pct = Math.round(POSTSEASON.seriesWinPct(mine, legends, 400) * 100);
+    const rnd = POSTSEASON.mulberry32(POSTSEASON.hashStr(mine.name + sq.key + draftSeedString()));
+    const hi = mine.strength >= legends.strength ? mine : legends;
+    const lo = hi === mine ? legends : mine;
+    const s = POSTSEASON.simSeries(hi, lo, rnd);
+    const won = s.winner === mine;
+    const log = s.games
+      .map((g) => `<div class="bk-game">G${g.g}: <b>${g.winner}</b>${g.close ? " (nail-biter)" : ""} — ${g.star} ${g.pts} pts</div>`)
+      .join("");
+    $("#legends-result").innerHTML =
+      `<div class="lg-pct">You'd beat the ${sq.name} in <b>${pct}%</b> of best-of-7s</div>` +
+      `<div class="lg-bar"><i style="width:${pct}%"></i></div>` +
+      `<div class="bk-series"><div class="bk-line">Showcase series</div>` +
+      `<div class="bk-win">→ <b>${s.winner.name}</b> ${s.score} ${won ? "🎉" : "😤"}</div>${log}</div>`;
   }
 
   const ordinal = (n) => {
@@ -1810,6 +2216,7 @@
     $("#final-close").onclick = () => $("#final-modal").classList.add("hidden");
     $("#final-modal").classList.remove("hidden");
     confettiBurst();
+    SFX.play("champion");
   }
 
   /** Lightweight confetti drop for the championship moment (pure CSS/JS). */
@@ -1858,9 +2265,11 @@
       let rosterRows = STARTER_SLOTS.map((slot) => {
         const p = m.starters[slot];
         if (!p) return `<div class="res-slot empty"><span class="res-pos">${slot}</span><span class="res-pname">— empty —</span></div>`;
+        const gr = _gradeById && _gradeById.get(p.id);
         return `<div class="res-slot">
             <span class="res-pos">${slot}</span>
             <span class="res-pname">${tierBadge(p)} ${p.name}</span>
+            ${gr ? `<span class="res-grade">${gr}</span>` : ""}
             <span class="res-ptag">${SCORING.usageTier(p)}</span>
             <span class="res-prate">${careerRating(p)}</span>
           </div>`;

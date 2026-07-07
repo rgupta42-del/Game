@@ -92,6 +92,37 @@
       if (!this._init()) return Promise.resolve();
       return this._ref(roomId).child("seats/" + seatIndex).set(name);
     },
+
+    /** Broadcast a quick emoji reaction: [seatIndex, emoji, clientTs]. */
+    react(roomId, seatIndex, emoji) {
+      if (!this._init()) return Promise.resolve();
+      return this._ref(roomId).child("reactions").push([seatIndex, emoji, Date.now()]);
+    },
+
+    // ---- Live auctions -----------------------------------------------------
+    /** Put a player on the block: { pid, bid, leaderId, ts }. */
+    setAuction(roomId, auction) {
+      if (!this._init()) return Promise.resolve();
+      return this._ref(roomId).child("auction").set(auction);
+    },
+    /** Atomically raise the bid (only if this lot is still live and higher). */
+    bidAuction(roomId, pid, amount, mgrId) {
+      if (!this._init()) return Promise.resolve(false);
+      return this._ref(roomId)
+        .child("auction")
+        .transaction((cur) => {
+          if (!cur || cur.pid !== pid) return; // abort: lot changed/closed
+          if (!(amount > cur.bid) || cur.leaderId === mgrId) return; // abort
+          return { pid: cur.pid, bid: amount, leaderId: mgrId, ts: Date.now() };
+        })
+        .then((res) => !!(res && res.committed))
+        .catch(() => false);
+    },
+    /** Close the lot (after the winning pick has been committed). */
+    clearAuction(roomId) {
+      if (!this._init()) return Promise.resolve();
+      return this._ref(roomId).child("auction").remove();
+    },
   };
 
   window.FBSync = FBSync;

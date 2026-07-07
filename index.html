@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=25" />
+  <link rel="stylesheet" href="styles.css?v=26" />
 </head>
 <body>
   <header class="topbar">
@@ -112,6 +112,15 @@
             <div id="era-filters" class="era-filters"></div>
             <span class="hint">Only players who starred in a checked decade are draftable — go all-time, or run a pure-’90s draft.</span>
           </div>
+          <div class="field">
+            <label for="challenge-select">Challenge mode</label>
+            <select id="challenge-select">
+              <option value="none" selected>None — full player pool</option>
+              <option value="nostars">🚫⭐ No Superstars — only players rated 85 or below</option>
+              <option value="daily60">🎲 Daily 60 — today's shared 60-player pool (same for everyone)</option>
+            </select>
+            <span class="hint">Daily 60 reshuffles at midnight — run it separately from your friends and compare results links.</span>
+          </div>
         </div>
 
         <div class="setup-card">
@@ -157,6 +166,7 @@
             <span id="sticky-onclock" class="sticky-onclock">—</span>
             <span id="sticky-meta" class="sticky-meta"></span>
           </div>
+          <button id="mute-btn" class="mute-btn" title="Toggle sound">🔊</button>
           <div id="pick-clock" class="pick-clock hidden"><span id="clock-time">1:00</span></div>
         </div>
         <div id="pick-ticker" class="pick-ticker hidden"></div>
@@ -176,12 +186,14 @@
           <span class="share-instr"></span>
         </div>
         <button id="copy-link" class="btn primary">🔗 Copy link to send</button>
+        <div id="react-bar" class="react-bar hidden"></div>
       </div>
 
       <!-- TAB: Players — the pick board -->
       <div id="tab-players" class="tab-panel active">
         <!-- Live auction block (auction drafts only) -->
         <div id="auction-panel" class="auction-panel hidden"></div>
+        <div id="queue-strip" class="queue-strip hidden"></div>
         <div id="team-needs" class="team-needs"></div>
         <div class="board-controls">
           <input id="search" type="text" placeholder="Search players…" />
@@ -232,8 +244,11 @@
           record, playoff depth, expected championships and peak ceiling.
         </p>
         <div id="results-podium" class="podium"></div>
+        <div id="playoff-bracket" class="playoff-bracket"></div>
+        <div id="draft-grades" class="draft-grades"></div>
         <div id="results-detail" class="results-detail"></div>
         <div class="results-actions">
+          <button id="challenge-legends" class="btn big">⚔️ Challenge the Legends</button>
           <button id="share-results" class="btn primary big">📋 Copy results link to share</button>
           <button id="play-again" class="btn big">New Draft</button>
         </div>
@@ -274,6 +289,17 @@
     </div>
   </div>
 
+  <!-- Legend gauntlet: pit a drafted team against an all-decade super-team. -->
+  <div id="legends-modal" class="modal hidden">
+    <div class="modal-card legends-card">
+      <h3>⚔️ Challenge the Legends</h3>
+      <p class="muted" id="legends-sub">Pick your team, pick a legend squad, and see if your dynasty survives a best-of-7.</p>
+      <div id="legends-options"></div>
+      <div id="legends-result" class="legends-result"></div>
+      <button id="legends-close" class="btn big">Close</button>
+    </div>
+  </div>
+
   <!-- Final standings: who won and where you finished, the moment it ends. -->
   <div id="final-modal" class="modal hidden">
     <div class="modal-card final-card">
@@ -296,13 +322,15 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=25"></script>
-  <script src="js/firebase-sync.js?v=25"></script>
+  <script src="js/firebase-config.js?v=26"></script>
+  <script src="js/firebase-sync.js?v=26"></script>
 
-  <script src="js/players.js?v=25"></script>
-  <script src="js/coaches.js?v=25"></script>
-  <script src="js/scoring.js?v=25"></script>
-  <script src="js/draft.js?v=25"></script>
-  <script src="js/app.js?v=25"></script>
+  <script src="js/sfx.js?v=26"></script>
+  <script src="js/players.js?v=26"></script>
+  <script src="js/coaches.js?v=26"></script>
+  <script src="js/scoring.js?v=26"></script>
+  <script src="js/postseason.js?v=26"></script>
+  <script src="js/draft.js?v=26"></script>
+  <script src="js/app.js?v=26"></script>
 </body>
 </html>

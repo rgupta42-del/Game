@@ -86,6 +86,31 @@ No install, no backend, no internet required. Just open the page.
   (low TS, high turnovers, questionable shot selection), be less efficient than the
   box score suggests — that's flagged post-finalization and modestly discounts the
   team's value.
+- **Playoff bracket finale** — the results screen seeds every drafted team by
+  its projected record and plays out a **simulated postseason**: best-of-7
+  series with home court, per-game star lines ("G7: Jordan 46 pts"), a bracket
+  champion and a **Finals MVP**. Deterministic per draft (shared links show the
+  same bracket) with a 🎲 re-simulate button for the "run it back" argument.
+- **Draft grades** — every pick is graded A+ through F against where the value
+  actually went (hammer-price-aware in auctions), with **💎 Steal of the draft**,
+  **🚨 Biggest reach**, per-team **draft GPA**, and grade chips on each roster.
+- **⚔️ Challenge the Legends** — pit any drafted team against all-decade
+  super-squads ('80s/'90s/'00s/'10s/'20s and the All-Time First Team): a
+  Monte-Carlo win probability plus a showcase best-of-7 with a game log.
+- **Arcade sound** — synthesized WebAudio effects (pick pop, your-turn chime,
+  clock tick + buzzer, bid blips, auction hammer, championship fanfare) with a
+  persistent 🔊/🔇 toggle in the draft header. No audio files, nothing to load.
+- **Live-room reactions** — quick-tap emoji (🔥 😂 🗑️ 😱 💪 🥶) that float up
+  everyone's screen in real time. Trash talk, synchronized.
+- **⭐ Pick queue** — star players into a personal watchlist; if your clock
+  expires, auto-pick drafts from *your* queue before falling back to best
+  available.
+- **Challenge modes** — 🚫⭐ **No Superstars** (only players rated ≤85) and
+  🎲 **Daily 60** (a date-seeded 60-player pool that's identical for everyone
+  that day — race your friends and compare results links).
+- **Online auctions** — auction drafts now work in live rooms too: nominations
+  and bids sync through Firebase transactions, the host keeps the hammer clock
+  (with seated-device backup), and CPU bidders are host-driven.
 - **Share first, draft second** — creating an online game immediately surfaces
   the invite link in a share dialog *before* you pick a seat or anything goes on
   the clock, so you can send it to your friends first.
