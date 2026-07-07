@@ -93,7 +93,11 @@ select:focus, input:focus { border-color: var(--accent-2); }
   text-transform: uppercase; color: var(--accent);
   border: 1px solid rgba(255,107,53,0.45); background: rgba(255,107,53,0.08);
   border-radius: 999px; padding: 6px 14px; margin-bottom: 16px;
+  animation: herofloat 3.2s ease-in-out infinite;
 }
+@keyframes herofloat { 50% { transform: translateY(-4px); } }
+.hchip { transition: transform 0.12s ease, border-color 0.12s ease; }
+.hchip:hover { transform: translateY(-2px); border-color: var(--accent-2); }
 .hero-title { margin: 0 0 12px; font-size: clamp(30px, 6vw, 52px); line-height: 1.08; letter-spacing: -0.5px; font-weight: 900; }
 .hero-title span {
   background: linear-gradient(92deg, var(--accent), #ffb020 55%, var(--accent-2));
@@ -221,6 +225,47 @@ select:focus, input:focus { border-color: var(--accent-2); }
 }
 .db-cell.coach-cell .db-pick-no { color: var(--accent-2); font-weight: 800; }
 
+/* Draft-completion progress: a thin strip along the bottom of the header. */
+.draft-progress { height: 4px; border-radius: 3px; background: #11141a; overflow: hidden; margin-top: 2px; }
+.draft-progress i {
+  display: block; height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--accent), #ffd54a);
+  border-radius: 3px; transition: width 0.5s ease;
+}
+
+/* Pick announcement toast ("Team X selects Michael Jordan") */
+.pick-toast {
+  position: fixed; left: 50%; bottom: 18px; transform: translate(-50%, 24px);
+  display: flex; align-items: center; gap: 11px; z-index: 55;
+  background: rgba(13,16,22,0.97); border: 1px solid var(--accent); border-radius: 14px;
+  padding: 10px 16px 10px 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.55), 0 0 22px rgba(255,107,53,0.25);
+  opacity: 0; pointer-events: none; max-width: min(480px, 92vw);
+}
+.pick-toast.show { animation: toastin 3s ease both; }
+@keyframes toastin {
+  0% { opacity: 0; transform: translate(-50%, 24px); }
+  8%, 88% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, 10px); }
+}
+.pick-toast img, .pick-toast .ptt-emoji {
+  width: 44px; height: 44px; border-radius: 10px; object-fit: cover; object-position: top center;
+  border: 2px solid var(--accent); flex-shrink: 0; display: grid; place-items: center; font-size: 22px;
+  background: #11141a;
+}
+.pick-toast .ptt-text { font-size: 14px; min-width: 0; }
+.pick-toast .ptt-text b { color: var(--accent); }
+.pick-toast .ptt-text span { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+/* Confetti for the championship moment */
+.confetti { position: fixed; inset: 0; pointer-events: none; z-index: 60; overflow: hidden; }
+.confetti i {
+  position: absolute; top: -20px; width: 8px; height: 14px; border-radius: 2px; opacity: 0.95;
+  animation: confall 3s linear forwards;
+}
+@keyframes confall {
+  to { transform: translateY(108vh) rotate(660deg); opacity: 0.7; }
+}
+
 /* Coach cards on the draft board + coach rows in rosters/results. */
 .coach-row .player-meta .pname { color: var(--accent-2); }
 .coach-slot-row .slot-key, .res-slot.coach .res-pos { color: var(--accent-2); }
@@ -339,6 +384,10 @@ select:focus, input:focus { border-color: var(--accent-2); }
   box-shadow: 0 4px 14px rgba(0,0,0,0.3);
 }
 .player-row.disabled { opacity: 0.4; }
+/* Fresh renders slide in ever so slightly — the board feels alive per pick.
+   (fill: backwards, so the hover lift still works once it finishes) */
+.player-row { animation: rowin 0.16s ease backwards; }
+@keyframes rowin { from { opacity: 0.45; transform: translateY(4px); } }
 /* Best available: the top draftable name gets marquee treatment. */
 .player-row.top-pick {
   border-color: rgba(255,176,32,0.55);
@@ -348,10 +397,6 @@ select:focus, input:focus { border-color: var(--accent-2); }
   font-size: 9px; font-weight: 900; letter-spacing: 0.6px; text-transform: uppercase;
   color: #1a1206; background: linear-gradient(135deg, #ffd54a, #ff9e2c);
   border-radius: 5px; padding: 1.5px 6px; margin-left: 6px; vertical-align: middle; white-space: nowrap;
-}
-.ovr-badge {
-  width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center;
-  font-weight: 800; font-size: 17px; background: #11141a; border: 1px solid var(--line);
 }
 
 /* NBA-Jam-style head sprite */
@@ -405,13 +450,6 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .injury-dot { font-size: 11px; }
 .player-actions { display: flex; gap: 6px; align-items: center; }
 
-/* skill bars in expanded view */
-.skill-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 14px; margin-top: 8px; font-size: 11px; }
-.skill { display: flex; align-items: center; gap: 6px; }
-.skill .sk-label { width: 64px; color: var(--muted); }
-.skill .bar { flex: 1; height: 6px; background: #11141a; border-radius: 4px; overflow: hidden; }
-.skill .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--good)); }
-
 /* ---------------- Legend (collapsed by default to save mobile space) --------- */
 .legend { font-size: 12px; color: var(--muted); line-height: 1.5; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin: 0 0 12px; }
 .legend b { color: var(--text); }
@@ -435,7 +473,6 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .slot-player { font-weight: 600; font-size: 14px; }
 .slot-sub { font-size: 11px; color: var(--muted); }
 .slot-ovr { font-weight: 800; }
-.bench-divider { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 12px 0 6px; }
 
 /* ---------------- Modal ---------------- */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.66); backdrop-filter: blur(3px); display: grid; place-items: center; z-index: 50; }
@@ -474,7 +511,15 @@ select:focus, input:focus { border-color: var(--accent-2); }
 /* ---------------- Results ---------------- */
 .podium { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 18px 0; }
 .podium-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; text-align: center; position: relative; }
-.podium-card.rank-1 { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,107,53,0.25) inset; }
+.podium-card.rank-1 {
+  border-color: #ffd54a;
+  box-shadow: 0 0 0 2px rgba(255,213,74,0.25) inset, 0 0 26px rgba(255,213,74,0.14);
+}
+.podium-card.rank-1::after {
+  content: "👑"; position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
+  font-size: 24px; animation: crownbob 2.2s ease-in-out infinite;
+}
+@keyframes crownbob { 50% { transform: translateX(-50%) translateY(-4px); } }
 .podium-rank { font-size: 30px; }
 .podium-name { font-weight: 800; font-size: 18px; margin: 6px 0; }
 .podium-record { color: var(--muted); font-size: 13px; }
@@ -486,8 +531,6 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .res-stats { display: flex; flex-wrap: wrap; gap: 16px; margin: 8px 0; }
 .res-stat { font-size: 13px; }
 .res-stat b { font-size: 18px; display: block; color: var(--accent-2); }
-.res-notes { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
-.res-notes li { font-size: 13px; color: var(--text); }
 .res-roster { font-size: 12px; color: var(--muted); margin-top: 8px; }
 
 /* results: roster + strengths/weaknesses */
@@ -521,6 +564,15 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .res-narrative { font-size: 13.5px; line-height: 1.6; color: var(--text); margin: 0; padding: 11px 13px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); }
 .timeline { display: flex; gap: 3px; align-items: flex-end; height: 60px; margin-top: 10px; }
 .timeline .bar { flex: 1; background: linear-gradient(180deg, var(--accent-2), #1d3a5c); border-radius: 3px 3px 0 0; min-height: 3px; position: relative; }
+.timeline .bar.gold { background: linear-gradient(180deg, #ffd54a, #a3720c); box-shadow: 0 0 8px rgba(255,213,74,0.4); }
+.timeline .bar.hot { background: linear-gradient(180deg, var(--accent), #7a2f12); }
+.timeline .bar.cold { background: linear-gradient(180deg, #3a4152, #232733); }
+.tl-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: 10.5px; color: var(--muted); }
+.tl-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.tl-k { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(180deg, var(--accent-2), #1d3a5c); display: inline-block; }
+.tl-k.gold { background: linear-gradient(180deg, #ffd54a, #a3720c); }
+.tl-k.hot { background: linear-gradient(180deg, var(--accent), #7a2f12); }
+.tl-k.cold { background: linear-gradient(180deg, #3a4152, #232733); }
 .timeline .bar:hover::after {
   content: attr(data-tip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
   background: #000; color: #fff; font-size: 10px; padding: 3px 6px; border-radius: 4px; white-space: nowrap;
@@ -568,7 +620,6 @@ select:focus, input:focus { border-color: var(--accent-2); }
   .player-row { grid-template-columns: 48px 1fr auto; gap: 10px; padding: 9px 10px; }
   .player-meta .pname { font-size: 14px; }
   .player-meta .psub { gap: 5px; font-size: 11px; }
-  .ovr-badge { width: 40px; height: 40px; font-size: 15px; }
   .player-photo { width: 48px; height: 48px; }
   .player-photo .ph-initials { font-size: 16px; }
   .btn.mini { padding: 9px 12px; } /* thumb-sized Draft/Hire buttons */

@@ -55,6 +55,7 @@
     draftOrder: null, // explicit pick order (persisted for random-order replay)
     turnGatePick: null, // pickLog length for which the on-clock human pressed "Go"
     finalShown: false, // final-standings popup shown for this game
+    announcedCount: null, // picks already announced via the pick toast
     activeTab: "players", // draft-room tab: "players" | "board" | "teams"
     lastPickSeen: -1, // pickLog length at last render (drives snap-back-to-players)
     allowedEras: ["80s", "90s", "00s", "10s", "20s"],
@@ -63,7 +64,6 @@
   const salaryOf = (p) => (p.isCoach ? SCORING.coachSalary(p) : SCORING.salaryValue(p));
   // Chosen cap, defaulting to $250 with coaches / $200 without.
   const capAmount = () => ui.capChoice || (ui.coachMode ? SCORING.SALARY_CAP_WITH_COACH : SCORING.SALARY_CAP);
-  const SALARY_CAP = SCORING.SALARY_CAP; // legacy reference (kept for tooltips)
   const managerSpent = (m) =>
     SCORING.starterPlayers({ starters: m.starters, bench: [] }).reduce((s, p) => s + salaryOf(p), 0) +
     (m.coach ? salaryOf(m.coach) : 0);
@@ -578,6 +578,14 @@
       showResults();
       return;
     }
+    // Announce each new pick with a toast — the draft-room "with the 5th pick…"
+    // moment. Only fires for exactly-one new pick (not link/room replays).
+    const nPicks = game.pickLog.length;
+    if (ui.announcedCount != null && nPicks === ui.announcedCount + 1) {
+      showPickToast(game.pickLog[nPicks - 1]);
+    }
+    ui.announcedCount = nPicks;
+
     // Yahoo-style snap-back: the moment a new pick puts a human (on this device)
     // on the clock, jump to the Players tab so they can draft immediately.
     const cur = game.currentManager();
@@ -612,37 +620,60 @@
     return !ui.live || myTurn(); // human: the on-clock seat's device
   }
   function manageClock() {
-    if (ui.clockSeconds <= 0 || game.isComplete) return;
+    if (game.isComplete) return;
     if (!ownsClock()) return;
     const m = game.currentManager();
-    // EVERY human turn (local pass-and-play AND online) is gated behind an
-    // explicit "Go": the message tells you it's your turn, and the clock only
-    // starts once you acknowledge it — nobody's clock burns while the device
-    // changes hands or they're getting to their phone. CPU clocks start
-    // immediately.
+    // EVERY human turn (local pass-and-play AND online, with or without a
+    // clock) is gated behind an explicit "Go": the message tells you it's your
+    // turn, and the clock only starts once you acknowledge it — nobody's clock
+    // burns while the device changes hands or they're getting to their phone.
+    // CPU clocks start immediately.
     if (m && !m.isCpu) {
       const atPick = game.pickLog.length;
       if (ui.turnGatePick === atPick) {
-        startClock();
+        if (ui.clockSeconds > 0) startClock();
       } else {
         showTurnGate(atPick);
       }
       return;
     }
-    startClock();
+    if (ui.clockSeconds > 0) startClock();
   }
+  /** Animated "…selects Michael Jordan" banner after every pick. */
+  function showPickToast(entry) {
+    const t = $("#pick-toast");
+    if (!t) return;
+    const p = entry.player;
+    const isCoach = p.isCoach;
+    const img = !isCoach && p.photo ? `<img src="${p.photo}" alt="" loading="lazy" />` : `<span class="ptt-emoji">${isCoach ? "🧠" : "🏀"}</span>`;
+    const slotTxt = isCoach ? "head coach" : entry.slot;
+    t.innerHTML =
+      `${img}<div class="ptt-text">` +
+      `<b>${entry.managerName}</b> select${/s$/i.test(entry.managerName) ? "" : "s"} <b>${p.name}</b>` +
+      `<span>Pick #${entry.overall} · ${slotTxt}${isCoach ? "" : " · " + careerRating(p) + " ovr"}</span></div>`;
+    t.classList.remove("hidden", "show");
+    void (t.offsetWidth || 0); // restart the slide-in animation
+    t.classList.add("show");
+    clearTimeout(ui._toastTimer);
+    ui._toastTimer = setTimeout(() => t.classList.add("hidden"), 3000);
+  }
+
   function showTurnGate(atPick) {
     const modal = $("#turn-modal");
     const m = game.currentManager();
+    const hasClock = ui.clockSeconds > 0;
     $("#turn-modal-title").textContent = `🟢 ${m ? m.name : "You"} — you're on the clock!`;
-    $("#turn-modal-sub").innerHTML =
-      `Round ${game.currentRound()} · Pick #${game.overallPickNumber()}. Your ` +
-      `${formatClock(ui.clockSeconds)} pick clock starts when you hit <b>Go</b> — ` +
-      `it won't run until you're ready.`;
+    $("#turn-modal-sub").innerHTML = hasClock
+      ? `Round ${game.currentRound()} · Pick #${game.overallPickNumber()}. Your ` +
+        `${formatClock(ui.clockSeconds)} pick clock starts when you hit <b>Go</b> — ` +
+        `it won't run until you're ready.`
+      : `Round ${game.currentRound()} · Pick #${game.overallPickNumber()}. ` +
+        `No pick clock — take your time and build something great.`;
+    $("#turn-go").textContent = hasClock ? "Go — start my clock ▶" : "Go — I'm ready ▶";
     $("#turn-go").onclick = () => {
       ui.turnGatePick = atPick;
       modal.classList.add("hidden");
-      startClock();
+      if (hasClock) startClock();
     };
     modal.classList.remove("hidden");
   }
@@ -886,6 +917,10 @@
     game.upcoming(8).slice(1).forEach((p) => {
       up.appendChild(el("span", "up-chip", `#${p.overall} <b>${p.manager.name}</b>`));
     });
+
+    // Draft-completion progress bar (thin strip under the header row).
+    const fill = $("#draft-progress-fill");
+    if (fill) fill.style.width = Math.round((game.pickLog.length / game.totalPicks) * 100) + "%";
 
     // Pulse the Players tab + light up the whole header whenever a human on
     // this device is on the clock.
@@ -1438,6 +1473,25 @@
 
     $("#final-close").onclick = () => $("#final-modal").classList.add("hidden");
     $("#final-modal").classList.remove("hidden");
+    confettiBurst();
+  }
+
+  /** Lightweight confetti drop for the championship moment (pure CSS/JS). */
+  function confettiBurst() {
+    const body = document.body;
+    if (!body || typeof body.appendChild !== "function") return;
+    const wrap = el("div", "confetti");
+    const colors = ["#ff6b35", "#ffd54a", "#4aa3ff", "#3ddc84", "#b06bff", "#ff5d5d"];
+    for (let i = 0; i < 70; i++) {
+      const c = el("i");
+      c.style.left = Math.random() * 100 + "%";
+      c.style.background = colors[i % colors.length];
+      c.style.animationDelay = (Math.random() * 0.9).toFixed(2) + "s";
+      c.style.animationDuration = (2.4 + Math.random() * 1.8).toFixed(2) + "s";
+      wrap.appendChild(c);
+    }
+    body.appendChild(wrap);
+    setTimeout(() => wrap.remove(), 5500);
   }
 
   function renderPodium(results) {
@@ -1531,13 +1585,20 @@
            <p class="res-narrative">${narrative}</p>`
         : "";
 
+      // Win timeline, color-coded by how deep each season went.
       const maxWins = 73;
       const bars = ev.seasons
         .map((s, idx) => {
           const h = Math.round((s.wins / maxWins) * 100);
-          return `<div class="bar" style="height:${h}%" data-tip="Yr ${idx + 1}: ${Math.round(s.wins)}-${Math.round(82 - s.wins)} · ${playoffLabel(s.playoffIndex)}"></div>`;
+          const cls = s.playoffIndex >= 84 ? " gold" : s.playoffIndex >= 70 ? " hot" : s.playoffIndex < 20 ? " cold" : "";
+          return `<div class="bar${cls}" style="height:${h}%" data-tip="Yr ${idx + 1}: ${Math.round(s.wins)}-${Math.round(82 - s.wins)} · ${playoffLabel(s.playoffIndex)}"></div>`;
         })
         .join("");
+      const tlLegend =
+        `<div class="tl-legend"><span><i class="tl-k gold"></i>Title favorite</span>` +
+        `<span><i class="tl-k hot"></i>Finals-level</span>` +
+        `<span><i class="tl-k"></i>Playoffs</span>` +
+        `<span><i class="tl-k cold"></i>Lottery</span></div>`;
 
       team.innerHTML = `
         <h4>${i === 0 ? "🏆 " : `#${i + 1} `}${m.isCpu ? "🤖 " : ""}${m.name}</h4>
@@ -1566,7 +1627,8 @@
         ${effHtml}
         ${narrativeHtml}
         <div class="res-subhead">15-year win trajectory</div>
-        <div class="timeline">${bars}</div>`;
+        <div class="timeline">${bars}</div>
+        ${tlLegend}`;
       wrap.appendChild(team);
     });
   }
