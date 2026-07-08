@@ -313,6 +313,66 @@ select:focus, input:focus { border-color: var(--accent-2); }
   .au-amt.big { flex: 1 1 44%; width: auto; }
 }
 
+/* Always-visible "your team" strip in the sticky header */
+.my-status {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 6px 10px;
+}
+.ms-team { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); }
+.ms-slots { display: flex; gap: 4px; }
+.ms-slot {
+  font-size: 11px; font-weight: 800; min-width: 24px; text-align: center;
+  border-radius: 6px; padding: 2px 5px;
+}
+.ms-slot.open { color: var(--warn); border: 1px dashed var(--warn); background: rgba(255,176,32,0.08); }
+.ms-slot.filled { color: var(--muted); border: 1px solid var(--line); background: #11141a; }
+.ms-money { margin-left: auto; display: flex; align-items: baseline; gap: 6px; }
+.ms-left { font-size: 18px; font-weight: 900; color: var(--good); font-variant-numeric: tabular-nums; }
+.ms-left.over { color: var(--bad); }
+.ms-money small { font-size: 10px; color: var(--muted); }
+
+/* Pinned live-auction bid bar (in the sticky header) */
+.auction-bidbar {
+  display: flex; flex-direction: column; gap: 7px;
+  background: linear-gradient(180deg, rgba(255,176,32,0.12), #11141a 90%);
+  border: 2px solid var(--warn); border-radius: 12px; padding: 8px 10px;
+  box-shadow: 0 0 20px rgba(255,176,32,0.22);
+}
+.abb-top { display: flex; align-items: center; gap: 10px; }
+.abb-player { font-weight: 800; font-size: 14px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.abb-bid { font-size: 20px; font-weight: 900; color: var(--warn); font-variant-numeric: tabular-nums; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; }
+.abb-bid small { font-size: 10px; font-weight: 700; color: var(--muted); }
+.abb-clock { font-size: 12px; font-weight: 800; color: var(--muted); min-width: 64px; text-align: right; }
+.abb-clock.warn { color: var(--bad); animation: clockpulse 1s infinite; }
+.abb-controls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.abb-btn { padding: 11px 12px; font-size: 15px; font-weight: 800; flex: 1 0 auto; min-width: 60px; }
+.abb-btn.lead { box-shadow: 0 0 14px rgba(255,107,53,0.4); }
+.abb-amt { width: 72px; padding: 11px 10px !important; font-size: 15px; }
+.abb-note { font-size: 13px; font-weight: 700; padding: 4px 2px; }
+.abb-note.muted { color: var(--muted); font-weight: 500; }
+@media (max-width: 600px) {
+  .abb-btn { flex: 1 1 28%; min-width: 0; padding: 12px 4px; }
+  .abb-amt { flex: 1 1 40%; width: auto; }
+}
+
+/* Pause */
+.pause-banner {
+  background: rgba(255,176,32,0.14); border: 1px solid var(--warn); color: var(--warn);
+  border-radius: 10px; padding: 9px 12px; font-size: 13px; font-weight: 700;
+  text-align: center; margin-bottom: 12px;
+}
+
+/* Results: one team at a time */
+.res-detail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.results-teamtabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px; -webkit-overflow-scrolling: touch; }
+.rtt {
+  flex: 0 0 auto; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 800;
+  background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+  border-radius: 999px; padding: 8px 13px; white-space: nowrap;
+}
+.rtt.active { background: linear-gradient(135deg, var(--accent), #ff8a5c); color: #1a1206; border-color: transparent; }
+
 /* Share-first gate */
 .sharelink-row { display: flex; gap: 8px; margin: 14px 0; }
 .sharelink-row input { flex: 1; min-width: 0; font-size: 13px; }

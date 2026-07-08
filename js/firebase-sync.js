@@ -93,6 +93,12 @@
       return this._ref(roomId).child("seats/" + seatIndex).set(name);
     },
 
+    /** Pause / resume the whole room (all devices freeze). */
+    setPaused(roomId, on) {
+      if (!this._init()) return Promise.resolve();
+      return this._ref(roomId).child("paused").set(!!on);
+    },
+
     /** Broadcast a quick emoji reaction: [seatIndex, emoji, clientTs]. */
     react(roomId, seatIndex, emoji) {
       if (!this._init()) return Promise.resolve();

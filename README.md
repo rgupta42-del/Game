@@ -62,6 +62,9 @@ No install, no backend, no internet required. Just open the page.
   valuations, the draft board shows the real hammer prices, and coaches go on
   the block too. Local mode for now — online auctions are coming.
 - **CPU pace** — choose ⚡ **Fast** (snappy CPU picks and bids) or 🐢 **Relaxed** (more time between CPU bids and picks), so auctions give you room to react. In auctions your **team's remaining budget and bid controls** (+$1 / +$5 / +$10 / Max / custom) are front-and-center.
+- **Pinned draft HUD** — your **open positions of need** (PG SG SF PF C, + 🧠) and your **budget spent / remaining** ride in the frozen header at all times. In auctions the **bid controls are pinned** in that header too, so you never scroll to re-bid.
+- **Auction nomination timer** — the pick clock becomes a per-turn nomination timer (e.g. 1:00 to put a player on the block; auto-nominates on expiry). Any player can **⏸ pause the draft** at any time (syncs to the whole room online). After you win a bid you **choose which slot** the player fills (locked mode).
+- **One-team results** — the results screen shows a **team selector**; tap a team to see just their analysis, so the breakdown isn't a wall of every roster at once.
 - **Position rules** — **Locked** (you assign each pick to a fixed open slot) or
   **Flexible** (draft freely; the lineup automatically re-arranges across
   PG↔SG↔SF↔PF↔C as long as a legal starting five remains, so you can take a second

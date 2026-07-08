@@ -55,6 +55,8 @@
     auctionMode: false, // auction draft (nominate + bid); forces salary cap
     cpuPace: "fast", // "fast" | "slow" — spacing between CPU bids/picks
     auction: null, // live auction state: { pid, bid, leaderId, deadline, timer }
+    paused: false, // draft paused (freezes clocks + CPU acting)
+    resultTeam: 0, // which team's analysis is shown on the results screen
     challenge: "none", // "none" | "nostars" | "daily60"
     chalSeed: null, // date seed for daily60 (travels in links/rooms)
     queue: [], // player ids starred by THIS device (auto-pick prefers these)
@@ -205,6 +207,7 @@
     const paintMute = () => (muteBtn.textContent = SFX.muted ? "🔇" : "🔊");
     muteBtn.addEventListener("click", () => { SFX.toggle(); paintMute(); });
     paintMute();
+    $("#pause-btn").addEventListener("click", togglePause);
   }
 
   // ---- Online state (share-a-link relay) ---------------------------------
@@ -345,6 +348,13 @@
     ui.gameGen++; // invalidate any pending timers
     rebuildGameFrom(names, picks, ui.cpuFlags);
     syncLiveAuction(data.auction || null);
+    // Room-wide pause: everyone freezes together.
+    const roomPaused = !!data.paused;
+    if (roomPaused !== ui.paused) {
+      ui.paused = roomPaused;
+      $("#pause-btn").textContent = roomPaused ? "▶" : "⏸";
+      $("#pause-banner").classList.toggle("hidden", !roomPaused);
+    }
 
     if (!ui.staticBuilt) {
       buildDraftStaticUI();
@@ -626,11 +636,13 @@
     ["teams", "👥 Teams"],
   ];
   function setTab(key) {
+    const changed = ui.activeTab !== key;
     ui.activeTab = key;
     DRAFT_TABS.forEach(([k]) => $("#tab-" + k).classList.toggle("active", k === key));
     $("#draft-tabs").querySelectorAll(".dt").forEach((b) => b.classList.toggle("active", b._tab === key));
-    // Each tab starts at the top (the sticky header stays in view regardless).
-    if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
+    // Only scroll to top when the visible tab actually changes — never on a
+    // re-render, so live auction bidding doesn't keep yanking you upward.
+    if (changed && typeof window.scrollTo === "function") window.scrollTo(0, 0);
   }
 
   function buildDraftStaticUI() {
@@ -718,6 +730,8 @@
       if (yourTurn && ui.activeTab !== "players") setTab("players");
     }
     renderStatus();
+    renderMyStatus();
+    renderAuctionBidbar();
     renderSharePanel();
     renderDraftBoard();
     renderTeamNeeds();
@@ -745,8 +759,16 @@
     return !ui.live || myTurn(); // human: the on-clock seat's device
   }
   function manageClock() {
-    if (game.isComplete) return;
-    if (game.auction) return; // the auction's own hammer clock paces the room
+    if (game.isComplete || ui.paused) return;
+    if (game.auction) {
+      // Auction: the pick clock becomes a NOMINATION timer for the human whose
+      // turn it is to nominate. Bidding is paced by the separate hammer clock.
+      if (ui.auction) return;
+      const nm = game.currentManager();
+      if (!nm || nm.isCpu || !ownsClock()) return;
+      if (ui.clockSeconds > 0) startClock();
+      return;
+    }
     if (!ownsClock()) return;
     const m = game.currentManager();
     // EVERY human turn (local pass-and-play AND online, with or without a
@@ -814,6 +836,7 @@
     updateClockDisplay();
     ui.clockTimer = setInterval(() => {
       if (gen !== ui.gameGen) return clearInterval(ui.clockTimer);
+      if (ui.paused) return; // frozen while paused; the interval keeps waiting
       ui.clockRemaining -= 1;
       updateClockDisplay();
       if (ui.clockRemaining > 0 && ui.clockRemaining <= 10) SFX.play("tick");
@@ -821,9 +844,12 @@
         clearInterval(ui.clockTimer);
         SFX.play("buzzer");
         const cur = game.currentManager();
-        // CPU turns are handled by scheduleCpuPick; only auto-pick for a human
-        // who has let their clock expire.
-        if (cur && !cur.isCpu) autoPick(cur);
+        // CPU turns are handled elsewhere; only auto-act for a human who let the
+        // clock expire — auto-NOMINATE in an auction, otherwise auto-pick.
+        if (cur && !cur.isCpu) {
+          if (game.auction && !ui.auction) autoNominate(cur);
+          else autoPick(cur);
+        }
       }
     }, 1000);
   }
@@ -880,6 +906,29 @@
     closeModal();
     commitPick(c.player, c.slot);
   }
+  /** Auction nomination clock expired — auto-nominate this manager's best value. */
+  function autoNominate(manager) {
+    const c = bestAvailablePick(manager);
+    if (c) openAuction(c.player);
+  }
+
+  // ---- Pause / resume -----------------------------------------------------
+  function togglePause() { setPaused(!ui.paused); }
+  function setPaused(on) {
+    ui.paused = on;
+    $("#pause-btn").textContent = on ? "▶" : "⏸";
+    $("#pause-banner").classList.toggle("hidden", !on);
+    if (on) {
+      stopClock();
+      if (ui.auction && ui.auction.timer) clearInterval(ui.auction.timer);
+      if (ui._auTimer) clearInterval(ui._auTimer);
+    } else if (game && !game.isComplete) {
+      // Re-arm clocks + CPU drivers for whatever's on the block.
+      if (ui.auction && !ui.auction.live) armAuctionClock();
+      renderDraft();
+    }
+    if (ui.live && ui.roomId && FBSync.setPaused) FBSync.setPaused(ui.roomId, on);
+  }
 
   // ========================================================================
   //  AUCTION DRAFT (local): nominate, bid in $1 steps or jump, hammer falls
@@ -906,6 +955,96 @@
     const cur = game.currentManager();
     return cur && !cur.isCpu ? cur : humans[0] || game.managers[0];
   };
+
+  /** The team whose budget + needs are pinned in the header: your live seat, else
+   *  (auction) your team, else the manager currently on the clock. */
+  function focusManager() {
+    if (ui.live && ui.mySeat != null) return game.managers[ui.mySeat];
+    if (game.auction) return auctionMe();
+    return game.currentManager() || game.managers[0];
+  }
+
+  /** Always-visible "your team" strip: open positions of need + budget/spent. */
+  function renderMyStatus() {
+    const box = $("#my-status");
+    if (!game || game.isComplete) { box.classList.add("hidden"); return; }
+    const m = focusManager();
+    if (!m) { box.classList.add("hidden"); return; }
+    // Positions of need (open starter slots), plus the coach slot if owed.
+    const openSet = new Set(game.unfilledStarterSlots(m));
+    const slotPills = STARTER_SLOTS.map((s) => {
+      const p = m.starters[s];
+      return p
+        ? `<span class="ms-slot filled" title="${p.name}">${s}</span>`
+        : `<span class="ms-slot open">${s}</span>`;
+    }).join("");
+    const coachPill = ui.coachMode
+      ? (m.coach ? `<span class="ms-slot filled" title="${m.coach.name}">🧠</span>`
+                 : `<span class="ms-slot open">🧠</span>`)
+      : "";
+    let money = "";
+    if (ui.capMode) {
+      const CAP = capAmount();
+      const spent = managerSpent(m);
+      const left = CAP - spent;
+      money =
+        `<span class="ms-money"><span class="ms-left${left < 0 ? " over" : ""}">$${left}</span>` +
+        `<small>left of $${CAP} · spent $${spent}</small></span>`;
+    }
+    box.innerHTML =
+      `<span class="ms-team">${m.id === (ui.mySeat) || (!ui.live && !m.isCpu) ? "You" : m.name}</span>` +
+      `<span class="ms-slots">${slotPills}${coachPill}</span>${money}`;
+    box.classList.remove("hidden");
+  }
+
+  /** Pinned live-auction bid controls in the sticky header (never scroll to bid). */
+  function renderAuctionBidbar() {
+    const bar = $("#auction-bidbar");
+    if (!game || !game.auction || !ui.auction) { bar.classList.add("hidden"); bar.innerHTML = ""; return; }
+    const a = ui.auction;
+    const p = findDraftable(a.pid);
+    const leader = game.managers[a.leaderId];
+    const me = auctionMe();
+    bar.innerHTML = "";
+
+    const top = el("div", "abb-top");
+    top.innerHTML =
+      `<span class="abb-player">${p.isCoach ? "🧠 " : ""}${p.name}</span>` +
+      `<span class="abb-bid">$${a.bid}<small>${leader.isCpu ? "🤖 " : ""}${leader.name}</small></span>` +
+      `<span class="abb-clock"></span>`;
+    bar.appendChild(top);
+
+    const controls = el("div", "abb-controls");
+    const meLeading = me && me.id === a.leaderId;
+    const meMax = me ? Math.max(0, maxBid(me)) : 0;
+    const meCanBid = me && canBid(me, p) && !meLeading && meMax >= a.bid + 1;
+    if (meLeading) {
+      controls.appendChild(el("span", "abb-note", "👑 You hold the high bid"));
+    } else if (meCanBid) {
+      [1, 5, 10].forEach((inc) => {
+        const target = a.bid + inc;
+        if (inc !== 1 && target > meMax) return;
+        const b = el("button", "btn primary abb-btn" + (inc === 1 ? " lead" : ""), `+$${inc}`);
+        b.onclick = () => placeBid(me.id, Math.min(target, meMax));
+        controls.appendChild(b);
+      });
+      const maxBtn = el("button", "btn abb-btn", `Max $${meMax}`);
+      maxBtn.onclick = () => placeBid(me.id, meMax);
+      controls.appendChild(maxBtn);
+      const inp = el("input", "abb-amt");
+      inp.type = "text";
+      inp.placeholder = "$";
+      controls.appendChild(inp);
+      const bidBtn = el("button", "btn abb-btn", "Bid");
+      bidBtn.onclick = () => { const v = parseInt(inp.value, 10); if (v) placeBid(me.id, v); };
+      controls.appendChild(bidBtn);
+    } else {
+      controls.appendChild(el("span", "abb-note muted", me && meMax < a.bid + 1 ? "💰 Maxed out on this player" : "Watching…"));
+    }
+    bar.appendChild(controls);
+    bar.classList.remove("hidden");
+    updateAuctionClock();
+  }
 
   /** What a CPU manager privately thinks this player is worth (per auction). */
   function cpuValuation(m, p) {
@@ -934,9 +1073,12 @@
     armAuctionClock();
     if (ui.auction) scheduleAuctionCpus();
     if (ui.auction) {
+      // No scroll-to-top: the pinned bid bar in the header keeps the controls
+      // in view, so you can bid without losing your place in the player list.
+      renderAuctionBidbar();
       renderAuctionPanel();
       renderPlayerList();
-      if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
+      renderStatus();
     }
   }
 
@@ -949,6 +1091,7 @@
     if (autoSellIfUncontested()) return;
     a.timer = setInterval(() => {
       if (ui.auction !== a || a.gen !== ui.gameGen) return clearInterval(a.timer);
+      if (ui.paused) return;
       a.deadline -= 1;
       updateAuctionClock();
       if (a.deadline <= 0) {
@@ -979,14 +1122,14 @@
   /** CPUs consider outbidding after a short, human-feeling pause. */
   function scheduleAuctionCpus() {
     const a = ui.auction;
-    if (!a) return;
+    if (!a || ui.paused) return;
     const p = findDraftable(a.pid);
     game.managers.forEach((m) => {
       if (!m.isCpu || m.id === a.leaderId || !canBid(m, p)) return;
       const val = a.vals[m.id] != null ? a.vals[m.id] : (a.vals[m.id] = cpuValuation(m, p));
       if (val < a.bid + 1) return;
       setTimeout(() => {
-        if (ui.auction !== a || a.gen !== ui.gameGen) return;
+        if (ui.auction !== a || a.gen !== ui.gameGen || ui.paused) return;
         if (a.leaderId === m.id) return;
         const v = a.vals[m.id];
         if (v < a.bid + 1 || maxBid(m) < a.bid + 1) return;
@@ -1014,6 +1157,7 @@
     armAuctionClock();
     if (ui.auction) {
       scheduleAuctionCpus();
+      renderAuctionBidbar();
       renderAuctionPanel();
     }
   }
@@ -1023,13 +1167,37 @@
     const a = ui.auction;
     if (!a) return;
     if (a.timer) clearInterval(a.timer);
+    const price = a.bid, pid = a.pid, winnerId = a.leaderId;
     ui.auction = null;
-    const p = findDraftable(a.pid);
-    const winner = game.managers[a.leaderId];
+    const p = findDraftable(pid);
+    const winner = game.managers[winnerId];
+    const finalize = (slot) => {
+      game.draft(p, slot, { forId: winner.id, price });
+      renderDraft();
+    };
     const slots = game.legalSlotsFor(winner, p).filter((s) => s !== "BENCH");
-    const slot = p.isCoach ? "COACH" : slots.includes(p.pos) ? p.pos : slots[0];
-    game.draft(p, slot, { forId: winner.id, price: a.bid });
-    renderDraft();
+    // Human winner on THIS device + locked positions + a real choice → let them
+    // pick which slot the player fills. (Flexible auto-arranges; CPUs auto-slot.)
+    const humanHere = !winner.isCpu && (!ui.live || winner.id === ui.mySeat);
+    if (!p.isCoach && game.posMode === "locked" && humanHere && slots.length > 1) {
+      openSlotChoice(p, `${winner.name} won ${p.name} for $${price} — choose a starting slot.`, slots, finalize);
+      return;
+    }
+    finalize(p.isCoach ? "COACH" : slots.includes(p.pos) ? p.pos : slots[0]);
+  }
+
+  /** Generic slot-choice modal that runs a callback with the chosen slot. */
+  function openSlotChoice(player, sub, slots, done) {
+    $("#slot-modal-title").textContent = `Where will ${player.name} play?`;
+    $("#slot-modal-sub").textContent = sub;
+    const wrap = $("#slot-options");
+    wrap.innerHTML = "";
+    slots.forEach((s) => {
+      const o = el("div", "so", s === "BENCH" ? "Bench" : s);
+      o.onclick = () => { $("#slot-modal").classList.add("hidden"); done(s); };
+      wrap.appendChild(o);
+    });
+    $("#slot-modal").classList.remove("hidden");
   }
 
   /** The live-auction block: nominated player's card + bid state + bidder rows. */
@@ -1176,11 +1344,13 @@
   function updateAuctionClock() {
     const a = ui.auction;
     if (!a) return;
-    const c = $("#auction-panel").querySelector(".au-clock");
-    if (!c) return;
     const s = Math.max(0, (a.live ? auctionSecondsLeft() : a.deadline) | 0);
-    c.textContent = s > 4 ? `⏳ ${s}s` : s > 2 ? "going once…" : s > 0 ? "going twice…" : "SOLD!";
-    c.classList.toggle("warn", s <= 4);
+    const txt = s > 4 ? `⏳ ${s}s` : s > 2 ? "going once…" : s > 0 ? "going twice…" : "SOLD!";
+    [$("#auction-panel").querySelector(".au-clock"), $("#auction-bidbar").querySelector(".abb-clock")].forEach((c) => {
+      if (!c) return;
+      c.textContent = txt;
+      c.classList.toggle("warn", s <= 4);
+    });
   }
 
   // ---- Live (Firebase) auctions: room state drives every device -----------
@@ -1219,6 +1389,7 @@
     ui._auTimer = setInterval(() => {
       const a = ui.auction;
       if (!a || !a.live) return clearInterval(ui._auTimer);
+      if (ui.paused) return;
       updateAuctionClock();
       const graceExtra = ui.isHost ? 0 : 6 + (ui.mySeat || 0) * 2;
       if (auctionSecondsLeft() <= -graceExtra && (ui.isHost || ui.mySeat != null)) {
@@ -1244,7 +1415,7 @@
   /** Host schedules CPU bids against the live lot (writes via transaction). */
   function hostDriveAuctionCpus() {
     const a = ui.auction;
-    if (!a || !a.live || !ui.isHost) return;
+    if (!a || !a.live || !ui.isHost || ui.paused) return;
     const p = findDraftable(a.pid);
     game.managers.forEach((m) => {
       if (!m.isCpu || m.id === a.leaderId || !canBid(m, p)) return;
@@ -1342,7 +1513,7 @@
   const cpuPickDelay = () => (ui.cpuPace === "slow" ? 1400 + Math.random() * 900 : CPU_DELAY_MS);
 
   function scheduleCpuPick() {
-    if (ui.live || game.isComplete) return; // live handled by scheduleLiveDrivers
+    if (ui.live || game.isComplete || ui.paused) return; // live handled by scheduleLiveDrivers
     const m = game.currentManager();
     if (!m || !m.isCpu) return;
     closeModal(); // a CPU never uses the manual slot picker
@@ -1384,7 +1555,7 @@
    * An atomic transaction guarantees only one pick ever commits (no doubles).
    */
   function scheduleLiveDrivers() {
-    if (!ui.live || !ui.roomReady || game.isComplete) return;
+    if (!ui.live || !ui.roomReady || game.isComplete || ui.paused) return;
     const m = game.currentManager();
     if (!m) return;
     const atPick = game.pickLog.length;
@@ -1550,18 +1721,9 @@
       banner.classList.add("hidden");
     }
 
-    const cap = $("#cap-status");
-    if (ui.capMode) {
-      const CAP = capAmount();
-      const spent = managerSpent(m);
-      const left = CAP - spent;
-      const coachTxt = ui.coachMode && m.coach ? ` · coach $${salaryOf(m.coach)}` : "";
-      cap.innerHTML = `💰 ${m.name}: spent <b>$${spent}</b>${coachTxt} · left <b>$${left}</b> / $${CAP}`;
-      cap.classList.toggle("over", left < 0);
-      cap.classList.remove("hidden");
-    } else {
-      cap.classList.add("hidden");
-    }
+    // Budget now lives in the always-visible #my-status strip (renderMyStatus),
+    // so the legacy cap-status line stays hidden to avoid duplication.
+    $("#cap-status").classList.add("hidden");
   }
 
   // What's on the board right now: players within the selected eras, plus the
@@ -2074,6 +2236,7 @@
       eval: evaluateRoster({ starters: m.starters, bench: m.bench, coach: m.coach }),
     }));
     results.sort((a, b) => b.eval.composite - a.eval.composite);
+    ui.resultTeam = 0; // default to the champion's analysis
 
     renderPodium(results);
     renderBracket(results, false);
@@ -2325,9 +2488,28 @@
   }
 
   function renderResultsDetail(results) {
+    // Declutter: show ONE team's analysis at a time behind a tab selector.
+    const tabs = $("#results-teamtabs");
+    tabs.innerHTML = "";
+    results.forEach((r, i) => {
+      const label = `${i === 0 ? "🏆 " : "#" + (i + 1) + " "}${r.manager.isCpu ? "🤖 " : ""}${r.manager.name}`;
+      const b = el("button", "rtt" + (i === 0 ? " active" : ""), label);
+      b.onclick = () => showResultTeam(results, i);
+      tabs.appendChild(b);
+    });
+    showResultTeam(results, Math.min(ui.resultTeam || 0, results.length - 1));
+  }
+
+  function showResultTeam(results, i) {
+    ui.resultTeam = i;
+    $("#results-teamtabs").querySelectorAll(".rtt").forEach((b, idx) => b.classList.toggle("active", idx === i));
     const wrap = $("#results-detail");
     wrap.innerHTML = "";
-    results.forEach((r, i) => {
+    wrap.appendChild(buildTeamCard(results[i], i));
+  }
+
+  function buildTeamCard(r, i) {
+    {
       const ev = r.eval;
       const m = r.manager;
       const team = el("div", "res-team");
@@ -2445,8 +2627,8 @@
         <div class="res-subhead">15-year win trajectory</div>
         <div class="timeline">${bars}</div>
         ${tlLegend}`;
-      wrap.appendChild(team);
-    });
+      return team;
+    }
   }
 
   // ---- Boot --------------------------------------------------------------

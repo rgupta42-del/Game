@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=27" />
+  <link rel="stylesheet" href="styles.css?v=28" />
 </head>
 <body>
   <header class="topbar">
@@ -174,15 +174,22 @@
             <span id="sticky-onclock" class="sticky-onclock">—</span>
             <span id="sticky-meta" class="sticky-meta"></span>
           </div>
+          <button id="pause-btn" class="mute-btn" title="Pause / resume the draft">⏸</button>
           <button id="mute-btn" class="mute-btn" title="Toggle sound">🔊</button>
           <div id="pick-clock" class="pick-clock hidden"><span id="clock-time">1:00</span></div>
         </div>
+        <!-- Your team, always in view: open positions of need + budget -->
+        <div id="my-status" class="my-status hidden"></div>
+        <!-- Live auction bid controls, pinned so you never scroll to re-bid -->
+        <div id="auction-bidbar" class="auction-bidbar hidden"></div>
         <div id="pick-ticker" class="pick-ticker hidden"></div>
         <div id="cap-status" class="cap-status hidden"></div>
         <div id="must-fill-banner" class="must-fill hidden"></div>
         <nav id="draft-tabs" class="draft-tabs" aria-label="Draft sections"></nav>
         <div class="draft-progress"><i id="draft-progress-fill"></i></div>
       </div>
+      <!-- Paused overlay banner -->
+      <div id="pause-banner" class="pause-banner hidden">⏸ Draft paused — tap ⏸ again to resume.</div>
 
       <!-- Pick announcement toast ("…selects Michael Jordan") -->
       <div id="pick-toast" class="pick-toast hidden"></div>
@@ -254,6 +261,11 @@
         <div id="results-podium" class="podium"></div>
         <div id="playoff-bracket" class="playoff-bracket"></div>
         <div id="draft-grades" class="draft-grades"></div>
+        <div class="res-detail-head">
+          <span class="res-subhead" style="margin:0">Team analysis</span>
+          <span class="muted" style="font-size:12px">Tap a team to see just their breakdown</span>
+        </div>
+        <div id="results-teamtabs" class="results-teamtabs"></div>
         <div id="results-detail" class="results-detail"></div>
         <div class="results-actions">
           <button id="challenge-legends" class="btn big">⚔️ Challenge the Legends</button>
@@ -330,15 +342,15 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=27"></script>
-  <script src="js/firebase-sync.js?v=27"></script>
+  <script src="js/firebase-config.js?v=28"></script>
+  <script src="js/firebase-sync.js?v=28"></script>
 
-  <script src="js/sfx.js?v=27"></script>
-  <script src="js/players.js?v=27"></script>
-  <script src="js/coaches.js?v=27"></script>
-  <script src="js/scoring.js?v=27"></script>
-  <script src="js/postseason.js?v=27"></script>
-  <script src="js/draft.js?v=27"></script>
-  <script src="js/app.js?v=27"></script>
+  <script src="js/sfx.js?v=28"></script>
+  <script src="js/players.js?v=28"></script>
+  <script src="js/coaches.js?v=28"></script>
+  <script src="js/scoring.js?v=28"></script>
+  <script src="js/postseason.js?v=28"></script>
+  <script src="js/draft.js?v=28"></script>
+  <script src="js/app.js?v=28"></script>
 </body>
 </html>
