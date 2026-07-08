@@ -61,6 +61,7 @@ No install, no backend, no internet required. Just open the page.
   team must keep $1 per unfilled slot), CPU managers bid to their own private
   valuations, the draft board shows the real hammer prices, and coaches go on
   the block too. Local mode for now — online auctions are coming.
+- **CPU pace** — choose ⚡ **Fast** (snappy CPU picks and bids) or 🐢 **Relaxed** (more time between CPU bids and picks), so auctions give you room to react. In auctions your **team's remaining budget and bid controls** (+$1 / +$5 / +$10 / Max / custom) are front-and-center.
 - **Position rules** — **Locked** (you assign each pick to a fixed open slot) or
   **Flexible** (draft freely; the lineup automatically re-arranges across
   PG↔SG↔SF↔PF↔C as long as a legal starting five remains, so you can take a second

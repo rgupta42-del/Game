@@ -53,6 +53,7 @@
     coachMode: false, // draft a head coach (a sixth, anytime slot)
     orderMode: "snake", // "snake" | "linear" | "random"
     auctionMode: false, // auction draft (nominate + bid); forces salary cap
+    cpuPace: "fast", // "fast" | "slow" — spacing between CPU bids/picks
     auction: null, // live auction state: { pid, bid, leaderId, deadline, timer }
     challenge: "none", // "none" | "nostars" | "daily60"
     chalSeed: null, // date seed for daily60 (travels in links/rooms)
@@ -481,6 +482,7 @@
     ui.posMode = $("#posmode-select").value === "flexible" ? "flexible" : "locked";
     ui.coachMode = $("#coach-toggle").checked;
     ui.capChoice = parseInt($("#cap-amount").value, 10) || null;
+    ui.cpuPace = $("#cpupace-select").value === "slow" ? "slow" : "fast";
     const orderSel = $("#order-select").value;
     ui.auctionMode = orderSel === "auction";
     ui.orderMode = ["snake", "linear", "random"].includes(orderSel) ? orderSel : "linear";
@@ -544,6 +546,7 @@
       coach: ui.coachMode,
       order: ui.orderMode,
       auction: ui.auctionMode,
+      pace: ui.cpuPace,
       chal: ui.challenge,
       chalSeed: ui.chalSeed,
     };
@@ -562,6 +565,7 @@
     if (cfg.coach != null) ui.coachMode = cfg.coach;
     if (cfg.order != null) ui.orderMode = cfg.order;
     if (cfg.auction != null) ui.auctionMode = cfg.auction;
+    if (cfg.pace != null) ui.cpuPace = cfg.pace;
     if (cfg.chal != null) { ui.challenge = cfg.chal; _dailySet = null; }
     if (cfg.chalSeed != null) { ui.chalSeed = cfg.chalSeed; _dailySet = null; }
     if (Array.isArray(cfg.seatOrder)) ui.draftOrder = cfg.seatOrder;
@@ -879,9 +883,13 @@
 
   // ========================================================================
   //  AUCTION DRAFT (local): nominate, bid in $1 steps or jump, hammer falls
-  //  after 8 quiet seconds. Winner pays the hammer price against the cap.
+  //  after a few quiet seconds. Winner pays the hammer price against the cap.
   // ========================================================================
-  const AUCTION_GRACE = 8; // seconds of silence before SOLD
+  // Seconds of silence before SOLD — Relaxed pace gives more breathing room.
+  const auctionGrace = () => (ui.cpuPace === "slow" ? 12 : 8);
+  // Delay before a CPU decides to counter-bid (ms). Relaxed feels more human.
+  const cpuBidDelay = () =>
+    ui.cpuPace === "slow" ? 1500 + Math.random() * 1900 : 500 + Math.random() * 1000;
 
   const capLeft = (m) => capAmount() - managerSpent(m);
   // Max legal bid: must keep $1 for every OTHER still-unfilled required slot.
@@ -889,6 +897,15 @@
   const canBid = (m, p) =>
     !game.rosterComplete(m) && game.legalSlotsFor(m, p).length > 0 && maxBid(m) >= 1;
   const eligibleBidders = (p) => game.managers.filter((m) => canBid(m, p));
+  /** The team "you" are for the prominent budget/bid panel: your live seat, the
+   *  sole human in a local game, else the manager currently nominating. */
+  const auctionMe = () => {
+    if (ui.live && ui.mySeat != null) return game.managers[ui.mySeat];
+    const humans = game.managers.filter((m) => !m.isCpu);
+    if (humans.length === 1) return humans[0];
+    const cur = game.currentManager();
+    return cur && !cur.isCpu ? cur : humans[0] || game.managers[0];
+  };
 
   /** What a CPU manager privately thinks this player is worth (per auction). */
   function cpuValuation(m, p) {
@@ -913,7 +930,7 @@
       FBSync.setAuction(ui.roomId, { pid: player.id, bid: 1, leaderId: opener.id, ts: Date.now() });
       return;
     }
-    ui.auction = { pid: player.id, bid: 1, leaderId: opener.id, gen: ui.gameGen, vals: {}, deadline: AUCTION_GRACE, timer: null };
+    ui.auction = { pid: player.id, bid: 1, leaderId: opener.id, gen: ui.gameGen, vals: {}, deadline: auctionGrace(), timer: null };
     armAuctionClock();
     if (ui.auction) scheduleAuctionCpus();
     if (ui.auction) {
@@ -926,7 +943,7 @@
   function armAuctionClock() {
     const a = ui.auction;
     if (!a) return;
-    a.deadline = AUCTION_GRACE;
+    a.deadline = auctionGrace();
     if (a.timer) clearInterval(a.timer);
     // Nobody else CAN outbid → hammer falls immediately.
     if (autoSellIfUncontested()) return;
@@ -975,7 +992,7 @@
         if (v < a.bid + 1 || maxBid(m) < a.bid + 1) return;
         // Sometimes jump a couple bucks to shake off snipers.
         placeBid(m.id, Math.min(v, a.bid + 1 + Math.floor(Math.random() * 2)));
-      }, 500 + Math.random() * 1000);
+      }, cpuBidDelay());
     });
   }
 
@@ -1061,12 +1078,61 @@
     head.appendChild(bidbox);
     panel.appendChild(head);
 
+    // ---- YOUR prominent budget + bid controls -----------------------------
+    const me = auctionMe();
+    if (me) {
+      const meLeading = me.id === a.leaderId;
+      const meMax = Math.max(0, maxBid(me));
+      const meLeft = capLeft(me);
+      const meCanBid = canBid(me, p) && !meLeading && meMax >= a.bid + 1;
+      const you = el("div", "au-you" + (meLeading ? " leading" : ""));
+      const budget = el("div", "au-you-budget");
+      budget.innerHTML =
+        `<span class="ayb-team">${me.name}${meLeading ? ' <span class="au-lead-tag">HIGH BID</span>' : ""}</span>` +
+        `<span class="ayb-nums"><span class="ayb-left">$${meLeft}</span><small>left of $${capAmount()}</small>` +
+        `<span class="ayb-max">max bid $${meMax}</span></span>`;
+      you.appendChild(budget);
+
+      const bidArea = el("div", "au-you-bid");
+      if (meLeading) {
+        bidArea.appendChild(el("div", "au-you-lead", "👑 You hold the high bid — sit tight or wait it out."));
+      } else if (meCanBid) {
+        const quick = [1, 5, 10];
+        quick.forEach((inc) => {
+          const target = a.bid + inc;
+          if (inc !== 1 && target > meMax) return;
+          const b = el("button", "btn primary au-quickbid" + (inc === 1 ? " lead" : ""), `+$${inc} → $${target}`);
+          b.onclick = () => placeBid(me.id, Math.min(target, meMax));
+          bidArea.appendChild(b);
+        });
+        const maxBtn = el("button", "btn au-quickbid", `Max $${meMax}`);
+        maxBtn.onclick = () => placeBid(me.id, meMax);
+        bidArea.appendChild(maxBtn);
+        const inp = el("input", "au-amt big");
+        inp.type = "text";
+        inp.placeholder = "$ custom";
+        bidArea.appendChild(inp);
+        const bidBtn = el("button", "btn au-quickbid", "Bid");
+        bidBtn.onclick = () => {
+          const v = parseInt(inp.value, 10);
+          if (v) placeBid(me.id, v);
+        };
+        bidArea.appendChild(bidBtn);
+      } else {
+        bidArea.appendChild(el("div", "au-you-lead muted", meMax < a.bid + 1 ? "💰 You're maxed out on this player." : "No open slot for this player."));
+      }
+      you.appendChild(bidArea);
+      panel.appendChild(you);
+    }
+
+    // ---- Other bidders (compact status; inline controls for OTHER humans) --
     const rows = el("div", "au-rows");
     game.managers.forEach((m) => {
       if (game.rosterComplete(m)) return;
+      if (me && m.id === me.id) return; // "you" are shown prominently above
       const leading = m.id === a.leaderId;
       const able =
-        canBid(m, p) && !leading && maxBid(m) >= a.bid + 1 && (!ui.live || m.id === ui.mySeat);
+        canBid(m, p) && !leading && maxBid(m) >= a.bid + 1 && !ui.live && !m.isCpu;
       const row = el("div", "au-row" + (leading ? " leading" : ""));
       const nameCol = el(
         "div",
@@ -1076,7 +1142,7 @@
       );
       row.appendChild(nameCol);
       const act = el("div", "au-actions");
-      if (!m.isCpu && able) {
+      if (able) {
         const plus = el("button", "btn primary mini", `+$1 → $${a.bid + 1}`);
         plus.onclick = () => placeBid(m.id, a.bid + 1);
         act.appendChild(plus);
@@ -1100,7 +1166,10 @@
       row.appendChild(act);
       rows.appendChild(row);
     });
-    panel.appendChild(rows);
+    if (rows.children.length) {
+      panel.appendChild(el("div", "au-rows-label", "Other bidders"));
+      panel.appendChild(rows);
+    }
     updateAuctionClock();
   }
 
@@ -1117,7 +1186,7 @@
   // ---- Live (Firebase) auctions: room state drives every device -----------
   function auctionSecondsLeft() {
     const a = ui.auction;
-    return a ? Math.ceil(AUCTION_GRACE - (Date.now() - a.ts) / 1000) : 0;
+    return a ? Math.ceil(auctionGrace() - (Date.now() - a.ts) / 1000) : 0;
   }
   /** Adopt the room's auction state (or clear it). Called on every room echo. */
   function syncLiveAuction(remote) {
@@ -1138,7 +1207,7 @@
       bid: remote.bid,
       leaderId: remote.leaderId,
       ts: remote.ts || Date.now(),
-      deadline: AUCTION_GRACE,
+      deadline: auctionGrace(),
       gen: ui.gameGen,
       live: true,
       vals: prev ? prev.vals : {},
@@ -1187,7 +1256,7 @@
         const v = cur.vals[m.id] != null ? cur.vals[m.id] : val;
         if (v < cur.bid + 1 || maxBid(m) < cur.bid + 1) return;
         FBSync.bidAuction(ui.roomId, cur.pid, Math.min(v, cur.bid + 1 + Math.floor(Math.random() * 2)), m.id);
-      }, 600 + Math.random() * 1100);
+      }, cpuBidDelay());
     });
   }
 
@@ -1269,6 +1338,8 @@
 
   // ---- CPU autodraft -----------------------------------------------------
   const CPU_DELAY_MS = 500; // local: snappy
+  // Local CPU pick delay, honoring the chosen pace.
+  const cpuPickDelay = () => (ui.cpuPace === "slow" ? 1400 + Math.random() * 900 : CPU_DELAY_MS);
 
   function scheduleCpuPick() {
     if (ui.live || game.isComplete) return; // live handled by scheduleLiveDrivers
@@ -1288,11 +1359,11 @@
         if (!cur || !cur.isCpu) return;
         const choice = cpuChoose(cur);
         if (choice) openAuction(choice.player);
-      }, 700 + Math.random() * 800);
+      }, ui.cpuPace === "slow" ? 1300 + Math.random() * 1000 : 700 + Math.random() * 800);
       return;
     }
 
-    const delay = ui.online ? 1600 + Math.random() * 1800 : CPU_DELAY_MS;
+    const delay = ui.online ? 1600 + Math.random() * 1800 : cpuPickDelay();
     setTimeout(() => {
       if (gen !== ui.gameGen || !game || game.isComplete) return;
       if (game.pickLog.length !== atPick) return;
