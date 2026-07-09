@@ -315,9 +315,9 @@ select:focus, input:focus { border-color: var(--accent-2); }
 
 /* Always-visible "your team" strip in the sticky header */
 .my-status {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
-  padding: 6px 10px;
+  padding: 5px 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
 }
 .ms-team { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); }
 .ms-slots { display: flex; gap: 4px; }
@@ -327,10 +327,11 @@ select:focus, input:focus { border-color: var(--accent-2); }
 }
 .ms-slot.open { color: var(--warn); border: 1px dashed var(--warn); background: rgba(255,176,32,0.08); }
 .ms-slot.filled { color: var(--muted); border: 1px solid var(--line); background: #11141a; }
-.ms-money { margin-left: auto; display: flex; align-items: baseline; gap: 6px; }
-.ms-left { font-size: 18px; font-weight: 900; color: var(--good); font-variant-numeric: tabular-nums; }
+.ms-money { margin-left: auto; display: flex; align-items: baseline; gap: 2px; flex-shrink: 0; }
+.ms-left { font-size: 15px; font-weight: 900; color: var(--good); font-variant-numeric: tabular-nums; }
 .ms-left.over { color: var(--bad); }
 .ms-money small { font-size: 10px; color: var(--muted); }
+.ms-slot { flex-shrink: 0; }
 
 /* Pinned live-auction bid bar (in the sticky header) */
 .auction-bidbar {
@@ -339,22 +340,23 @@ select:focus, input:focus { border-color: var(--accent-2); }
   border: 2px solid var(--warn); border-radius: 12px; padding: 8px 10px;
   box-shadow: 0 0 20px rgba(255,176,32,0.22);
 }
-.abb-top { display: flex; align-items: center; gap: 10px; }
-.abb-player { font-weight: 800; font-size: 14px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.abb-bid { font-size: 20px; font-weight: 900; color: var(--warn); font-variant-numeric: tabular-nums; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; }
+.abb-top { display: flex; align-items: center; gap: 9px; }
+.auction-bidbar .player-photo { width: 42px; height: 42px; border-width: 2px; }
+.auction-bidbar .player-photo .ph-ovr { font-size: 11px; line-height: 14px; }
+.abb-info { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.abb-player { font-weight: 800; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.abb-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.abb-sub b { color: var(--good); }
+.abb-bid { font-size: 19px; font-weight: 900; color: var(--warn); font-variant-numeric: tabular-nums; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; flex-shrink: 0; }
 .abb-bid small { font-size: 10px; font-weight: 700; color: var(--muted); }
-.abb-clock { font-size: 12px; font-weight: 800; color: var(--muted); min-width: 64px; text-align: right; }
+.abb-clock { font-size: 11px; font-weight: 800; color: var(--muted); min-width: 50px; text-align: right; flex-shrink: 0; }
 .abb-clock.warn { color: var(--bad); animation: clockpulse 1s infinite; }
-.abb-controls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.abb-btn { padding: 11px 12px; font-size: 15px; font-weight: 800; flex: 1 0 auto; min-width: 60px; }
-.abb-btn.lead { box-shadow: 0 0 14px rgba(255,107,53,0.4); }
-.abb-amt { width: 72px; padding: 11px 10px !important; font-size: 15px; }
-.abb-note { font-size: 13px; font-weight: 700; padding: 4px 2px; }
+.abb-controls { display: flex; gap: 6px; flex-wrap: nowrap; align-items: center; }
+.abb-btn { padding: 8px 11px; font-size: 13px; font-weight: 800; flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+.abb-btn.lead { box-shadow: 0 0 12px rgba(255,107,53,0.35); }
+.abb-amt { width: 58px; padding: 8px 8px !important; font-size: 13px; flex: 1 1 40px; min-width: 40px; }
+.abb-note { font-size: 12px; font-weight: 700; padding: 2px 2px; }
 .abb-note.muted { color: var(--muted); font-weight: 500; }
-@media (max-width: 600px) {
-  .abb-btn { flex: 1 1 28%; min-width: 0; padding: 12px 4px; }
-  .abb-amt { flex: 1 1 40%; width: auto; }
-}
 
 /* Pause */
 .pause-banner {

@@ -1116,8 +1116,8 @@
       const spent = managerSpent(m);
       const left = CAP - spent;
       money =
-        `<span class="ms-money"><span class="ms-left${left < 0 ? " over" : ""}">$${left}</span>` +
-        `<small>left of $${CAP} · spent $${spent}</small></span>`;
+        `<span class="ms-money" title="Spent $${spent}"><span class="ms-left${left < 0 ? " over" : ""}">$${left}</span>` +
+        `<small>/$${CAP}</small></span>`;
     }
     box.innerHTML =
       `<span class="ms-team">${m.id === (ui.mySeat) || (!ui.live && !m.isCpu) ? "You" : m.name}</span>` +
@@ -1136,10 +1136,15 @@
     bar.innerHTML = "";
 
     const top = el("div", "abb-top");
-    top.innerHTML =
+    top.appendChild(playerPhoto(p, p.isCoach ? p.overall : careerRating(p)));
+    const info = el("div", "abb-info");
+    const pv = proposedValue(p);
+    info.innerHTML =
       `<span class="abb-player">${p.isCoach ? "🧠 " : ""}${p.name}</span>` +
-      `<span class="abb-bid">$${a.bid}<small>${leader.isCpu ? "🤖 " : ""}${leader.name}</small></span>` +
-      `<span class="abb-clock"></span>`;
+      `<span class="abb-sub">${p.isCoach ? p.style : p.eligible.join("/") + " · Peak " + peakOverall(p)} · value <b>$${pv}</b></span>`;
+    top.appendChild(info);
+    top.appendChild(el("span", "abb-bid", `$${a.bid}<small>${leader.isCpu ? "🤖 " : ""}${leader.name}</small>`));
+    top.appendChild(el("span", "abb-clock", ""));
     bar.appendChild(top);
 
     const controls = el("div", "abb-controls");
@@ -1149,13 +1154,9 @@
     if (meLeading) {
       controls.appendChild(el("span", "abb-note", "👑 You hold the high bid"));
     } else if (meCanBid) {
-      [1, 5, 10].forEach((inc) => {
-        const target = a.bid + inc;
-        if (inc !== 1 && target > meMax) return;
-        const b = el("button", "btn primary abb-btn" + (inc === 1 ? " lead" : ""), `+$${inc}`);
-        b.onclick = () => placeBid(me.id, Math.min(target, meMax));
-        controls.appendChild(b);
-      });
+      const plus = el("button", "btn primary abb-btn lead", `+$1 → $${a.bid + 1}`);
+      plus.onclick = () => placeBid(me.id, a.bid + 1);
+      controls.appendChild(plus);
       const maxBtn = el("button", "btn abb-btn", `Max $${meMax}`);
       maxBtn.onclick = () => placeBid(me.id, meMax);
       controls.appendChild(maxBtn);
@@ -1338,88 +1339,8 @@
     }
     const a = ui.auction;
     const p = findDraftable(a.pid);
-    const leader = game.managers[a.leaderId];
-    panel.classList.remove("hidden");
-    panel.innerHTML = "";
-
-    const head = el("div", "au-head");
-    head.appendChild(playerPhoto(p, p.isCoach ? p.overall : careerRating(p)));
-    const info = el("div", "au-info");
-    const pct = Math.round((proposedValue(p) / capAmount()) * 100);
-    info.innerHTML = p.isCoach
-      ? `<div class="au-name">🧠 ${p.name}</div>
-         <div class="au-tags">
-           <span class="tag pos">${p.style}</span>
-           <span class="tag">Coach ${p.overall}</span>
-           <span class="tag">Off ${p.traits.off}</span><span class="tag">Def ${p.traits.def}</span>
-         </div>
-         <div class="au-value">Proposed value <b>$${proposedValue(p)}</b> · ${pct}% of the $${capAmount()} cap</div>`
-      : `<div class="au-name">${tierBadge(p)} ${p.name} ${injuryDot(p.injuryRisk)}</div>
-         <div class="au-tags">
-           <span class="tag pos">${p.eligible.join("/")}</span>
-           <span class="tag">Peak ${peakOverall(p)}</span>
-           <span class="tag">Clutch ${p.ext.clutch}</span>
-           <span class="tag">${SCORING.usageTier(p)}</span>
-           <span class="tag">${p.archetype}</span>
-         </div>
-         <div class="au-value">Proposed value <b>$${proposedValue(p)}</b> · ${pct}% of the $${capAmount()} cap</div>`;
-    head.appendChild(info);
-    const bidbox = el(
-      "div",
-      "au-bid",
-      `<span class="au-bid-label">Current bid</span><span class="au-bid-amt">$${a.bid}</span>` +
-        `<span class="au-leader">${leader.isCpu ? "🤖 " : ""}${leader.name}</span>` +
-        `<span class="au-clock"></span>`
-    );
-    head.appendChild(bidbox);
-    panel.appendChild(head);
-
-    // ---- YOUR prominent budget + bid controls -----------------------------
     const me = auctionMe();
-    if (me) {
-      const meLeading = me.id === a.leaderId;
-      const meMax = Math.max(0, maxBid(me));
-      const meLeft = capLeft(me);
-      const meCanBid = canBid(me, p) && !meLeading && meMax >= a.bid + 1;
-      const you = el("div", "au-you" + (meLeading ? " leading" : ""));
-      const budget = el("div", "au-you-budget");
-      budget.innerHTML =
-        `<span class="ayb-team">${me.name}${meLeading ? ' <span class="au-lead-tag">HIGH BID</span>' : ""}</span>` +
-        `<span class="ayb-nums"><span class="ayb-left">$${meLeft}</span><small>left of $${capAmount()}</small>` +
-        `<span class="ayb-max">max bid $${meMax}</span></span>`;
-      you.appendChild(budget);
-
-      const bidArea = el("div", "au-you-bid");
-      if (meLeading) {
-        bidArea.appendChild(el("div", "au-you-lead", "👑 You hold the high bid — sit tight or wait it out."));
-      } else if (meCanBid) {
-        const quick = [1, 5, 10];
-        quick.forEach((inc) => {
-          const target = a.bid + inc;
-          if (inc !== 1 && target > meMax) return;
-          const b = el("button", "btn primary au-quickbid" + (inc === 1 ? " lead" : ""), `+$${inc} → $${target}`);
-          b.onclick = () => placeBid(me.id, Math.min(target, meMax));
-          bidArea.appendChild(b);
-        });
-        const maxBtn = el("button", "btn au-quickbid", `Max $${meMax}`);
-        maxBtn.onclick = () => placeBid(me.id, meMax);
-        bidArea.appendChild(maxBtn);
-        const inp = el("input", "au-amt big");
-        inp.type = "text";
-        inp.placeholder = "$ custom";
-        bidArea.appendChild(inp);
-        const bidBtn = el("button", "btn au-quickbid", "Bid");
-        bidBtn.onclick = () => {
-          const v = parseInt(inp.value, 10);
-          if (v) placeBid(me.id, v);
-        };
-        bidArea.appendChild(bidBtn);
-      } else {
-        bidArea.appendChild(el("div", "au-you-lead muted", meMax < a.bid + 1 ? "💰 You're maxed out on this player." : "No open slot for this player."));
-      }
-      you.appendChild(bidArea);
-      panel.appendChild(you);
-    }
+    panel.innerHTML = "";
 
     // ---- Other bidders (compact status; inline controls for OTHER humans) --
     const rows = el("div", "au-rows");
@@ -1463,8 +1384,11 @@
       rows.appendChild(row);
     });
     if (rows.children.length) {
+      panel.classList.remove("hidden");
       panel.appendChild(el("div", "au-rows-label", "Other bidders"));
       panel.appendChild(rows);
+    } else {
+      panel.classList.add("hidden");
     }
     updateAuctionClock();
   }
@@ -1833,7 +1757,9 @@
     const banner = $("#must-fill-banner");
     const needStarters = game.unfilledStarterSlots(m);
     const needCoach = game.needsCoach(m);
-    if (game.auction && !ui.auction) {
+    if (game.auction && ui.auction) {
+      banner.classList.add("hidden"); // lot live: the YOU pills already show needs
+    } else if (game.auction && !ui.auction) {
       banner.textContent = `🔨 ${m.name}: your nomination — put a player on the block; the highest bid wins them.`;
       banner.classList.remove("hidden");
     } else if (needStarters.length || needCoach) {
