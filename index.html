@@ -6,8 +6,11 @@
   <meta name="theme-color" content="#0f1115" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="icon" type="image/png" href="icon-192.png" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=28" />
+  <link rel="stylesheet" href="styles.css?v=29" />
 </head>
 <body>
   <header class="topbar">
@@ -47,6 +50,26 @@
           <div class="step"><b>2</b><span>Snake-draft your five (+ coach)</span></div>
           <div class="step"><b>3</b><span>The engine crowns a dynasty</span></div>
         </div>
+      </div>
+
+      <!-- Resume a draft that was interrupted mid-stream -->
+      <div id="resume-card" class="resume-card hidden">
+        <div class="rc-text">
+          <b>▶ Resume your draft</b>
+          <span id="resume-sub" class="muted"></span>
+        </div>
+        <div class="rc-actions">
+          <button id="resume-go" class="btn primary">Resume</button>
+          <button id="resume-discard" class="btn ghost">Discard</button>
+        </div>
+      </div>
+
+      <!-- One-tap Quick Start presets (everything below stays tweakable) -->
+      <div class="presets" id="preset-row">
+        <button class="preset" data-preset="classic"><b>🏆 Classic Snake</b><span>4 teams · all eras · 1:00 clock</span></button>
+        <button class="preset" data-preset="auction"><b>💰 Auction Night</b><span>coach + $250 cap · relaxed CPUs</span></button>
+        <button class="preset" data-preset="daily"><b>🎲 Daily Challenge</b><span>today's shared 60-player pool</span></button>
+        <button class="preset" data-preset="quick"><b>⚡ Quick vs CPUs</b><span>you + 3 CPUs · no clock</span></button>
       </div>
 
       <!-- Setup, grouped into scannable cards -->
@@ -145,6 +168,14 @@
               <span>💰 <b>Salary-cap mode</b> — stars cost a fortune on a steep curve, so you can't stack a Tier-1A roster.</span>
             </label>
           </div>
+          <div class="field">
+            <label for="bench-select">Bench</label>
+            <select id="bench-select">
+              <option value="0" selected>No bench — just the starting five</option>
+              <option value="2">+2 bench spots (injury cover; two extra rounds)</option>
+            </select>
+            <span class="hint">Bench players back up faded starters in the projection. Not available in auctions.</span>
+          </div>
           <div class="field hidden" id="cap-amount-field">
             <label for="cap-amount">Salary cap</label>
             <select id="cap-amount">
@@ -174,6 +205,7 @@
             <span id="sticky-onclock" class="sticky-onclock">—</span>
             <span id="sticky-meta" class="sticky-meta"></span>
           </div>
+          <button id="undo-btn" class="mute-btn hidden" title="Undo the last pick">↩</button>
           <button id="pause-btn" class="mute-btn" title="Pause / resume the draft">⏸</button>
           <button id="mute-btn" class="mute-btn" title="Toggle sound">🔊</button>
           <div id="pick-clock" class="pick-clock hidden"><span id="clock-time">1:00</span></div>
@@ -261,6 +293,7 @@
         <div id="results-podium" class="podium"></div>
         <div id="playoff-bracket" class="playoff-bracket"></div>
         <div id="draft-grades" class="draft-grades"></div>
+        <div id="daily-lb" class="daily-lb hidden"></div>
         <div class="res-detail-head">
           <span class="res-subhead" style="margin:0">Team analysis</span>
           <span class="muted" style="font-size:12px">Tap a team to see just their breakdown</span>
@@ -268,7 +301,8 @@
         <div id="results-teamtabs" class="results-teamtabs"></div>
         <div id="results-detail" class="results-detail"></div>
         <div class="results-actions">
-          <button id="challenge-legends" class="btn big">⚔️ Challenge the Legends</button>
+          <button id="copy-recap" class="btn big">📣 Copy recap for the group chat</button>
+          <button id="challenge-legends" class="btn big">⚔️ Legends &amp; head-to-head</button>
           <button id="share-results" class="btn primary big">📋 Copy results link to share</button>
           <button id="play-again" class="btn big">New Draft</button>
         </div>
@@ -342,15 +376,21 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=28"></script>
-  <script src="js/firebase-sync.js?v=28"></script>
+  <script src="js/firebase-config.js?v=29"></script>
+  <script src="js/firebase-sync.js?v=29"></script>
 
-  <script src="js/sfx.js?v=28"></script>
-  <script src="js/players.js?v=28"></script>
-  <script src="js/coaches.js?v=28"></script>
-  <script src="js/scoring.js?v=28"></script>
-  <script src="js/postseason.js?v=28"></script>
-  <script src="js/draft.js?v=28"></script>
-  <script src="js/app.js?v=28"></script>
+  <script src="js/sfx.js?v=29"></script>
+  <script src="js/players.js?v=29"></script>
+  <script src="js/coaches.js?v=29"></script>
+  <script src="js/scoring.js?v=29"></script>
+  <script src="js/postseason.js?v=29"></script>
+  <script src="js/draft.js?v=29"></script>
+  <script src="js/app.js?v=29"></script>
+  <script>
+    // Installable app + offline play (https only; no-op locally/in tests).
+    if ("serviceWorker" in navigator && location.protocol === "https:") {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    }
+  </script>
 </body>
 </html>

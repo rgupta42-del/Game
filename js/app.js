@@ -56,6 +56,9 @@
     cpuPace: "fast", // "fast" | "slow" — spacing between CPU bids/picks
     auction: null, // live auction state: { pid, bid, leaderId, deadline, timer }
     paused: false, // draft paused (freezes clocks + CPU acting)
+    benchSize: 0, // optional bench spots (+2); not available in auctions
+    expandedPid: null, // player row currently unfolded into a detail card
+    comparePid: null, // first player chosen for a side-by-side compare
     resultTeam: 0, // which team's analysis is shown on the results screen
     challenge: "none", // "none" | "nostars" | "daily60"
     chalSeed: null, // date seed for daily60 (travels in links/rooms)
@@ -111,6 +114,7 @@
     }
     return (
       SCORING.starterPlayers({ starters: m.starters, bench: [] }).reduce((s, p) => s + salaryOf(p), 0) +
+      (m.bench || []).reduce((s, p) => s + salaryOf(p), 0) +
       (m.coach ? salaryOf(m.coach) : 0)
     );
   };
@@ -166,6 +170,7 @@
       const inDraft = game && !game.isComplete && $("#draft-screen").classList.contains("active");
       if (inDraft && !confirm("Leave the current draft and start over from scratch?")) return;
       // Clear any shared/room link state and reload to a fresh setup screen.
+      clearSavedDraft();
       history.replaceState(null, "", location.pathname + location.search);
       location.reload();
     };
@@ -208,6 +213,53 @@
     muteBtn.addEventListener("click", () => { SFX.toggle(); paintMute(); });
     paintMute();
     $("#pause-btn").addEventListener("click", togglePause);
+    $("#undo-btn").addEventListener("click", undoLastPick);
+
+    // Quick Start presets: fill the whole form in one tap (still tweakable).
+    const PRESETS = {
+      classic: { mode: "local", n: 4, clock: "60", order: "snake", pos: "locked", pace: "fast", coach: false, cap: false, chal: "none", bench: "0", cpus: [] },
+      auction: { mode: "local", n: 4, clock: "60", order: "auction", pos: "locked", pace: "slow", coach: true, cap: true, capAmt: "250", chal: "none", bench: "0", cpus: [1, 2, 3] },
+      daily:   { mode: "local", n: 4, clock: "60", order: "snake", pos: "locked", pace: "fast", coach: false, cap: false, chal: "daily60", bench: "0", cpus: [1, 2, 3] },
+      quick:   { mode: "local", n: 4, clock: "0",  order: "snake", pos: "locked", pace: "fast", coach: false, cap: false, chal: "none", bench: "0", cpus: [1, 2, 3] },
+    };
+    function applyPreset(key) {
+      const p = PRESETS[key];
+      if (!p) return;
+      const poke = (elm, type) => {
+        if (typeof Event === "function" && elm.dispatchEvent) elm.dispatchEvent(new Event(type));
+        else if (elm.fire) elm.fire(type);
+      };
+      $("#mode-select").value = p.mode;
+      poke($("#mode-select"), "change");
+      $("#num-managers").value = String(p.n);
+      poke($("#num-managers"), "change");
+      $("#clock-select").value = p.clock;
+      $("#order-select").value = p.order;
+      $("#posmode-select").value = p.pos;
+      $("#cpupace-select").value = p.pace;
+      $("#coach-toggle").checked = p.coach;
+      $("#cap-toggle").checked = p.cap;
+      if (p.capAmt) $("#cap-amount").value = p.capAmt;
+      $("#challenge-select").value = p.chal;
+      $("#bench-select").value = p.bench;
+      // Era chips: all on.
+      $("#era-filters").querySelectorAll("input").forEach((c) => { c.checked = true; });
+      // CPU seats.
+      const rows = $("#manager-names").querySelectorAll(".mn-row");
+      rows.forEach((r, i) => {
+        const cb = r.querySelector('input[type="checkbox"]');
+        if (cb) cb.checked = p.cpus.includes(i);
+      });
+      syncCapUI();
+      $("#preset-row").querySelectorAll(".preset").forEach((b) => b.classList.toggle("active", b._preset === key));
+    }
+    $("#preset-row").querySelectorAll(".preset").forEach((b) => {
+      // real DOM: dataset; harness: fall back to matching by html
+      b._preset = (b.dataset && b.dataset.preset) || ((b.innerHTML.match(/Classic/) && "classic") || (b.innerHTML.match(/Auction/) && "auction") || (b.innerHTML.match(/Daily/) && "daily") || "quick");
+      b.addEventListener("click", () => applyPreset(b._preset));
+    });
+
+    initResumeCard();
   }
 
   // ---- Online state (share-a-link relay) ---------------------------------
@@ -262,7 +314,7 @@
 
   function rebuildGameFrom(names, picks, cpuFlags) {
     game = new DraftGame(names, {
-      benchSize: 0,
+      benchSize: ui.benchSize,
       cpuFlags: cpuFlags || ui.cpuFlags || [],
       posMode: ui.posMode,
       coachMode: ui.coachMode,
@@ -493,10 +545,12 @@
     ui.coachMode = $("#coach-toggle").checked;
     ui.capChoice = parseInt($("#cap-amount").value, 10) || null;
     ui.cpuPace = $("#cpupace-select").value === "slow" ? "slow" : "fast";
+    ui.benchSize = parseInt($("#bench-select").value, 10) || 0;
     const orderSel = $("#order-select").value;
     ui.auctionMode = orderSel === "auction";
     ui.orderMode = ["snake", "linear", "random"].includes(orderSel) ? orderSel : "linear";
     if (ui.auctionMode) {
+      ui.benchSize = 0; // auctions fill the five + coach only
       ui.capMode = true; // auctions REQUIRE a salary cap
       if (!ui.capChoice) ui.capChoice = ui.coachMode ? 250 : 200;
       if (online && !liveAvailable()) {
@@ -530,7 +584,7 @@
     ui.auction = null;
     ui.queue = [];
     game = new DraftGame(names, {
-      benchSize: 0, cpuFlags, posMode: ui.posMode, coachMode: ui.coachMode, orderMode: ui.orderMode,
+      benchSize: ui.benchSize, cpuFlags, posMode: ui.posMode, coachMode: ui.coachMode, orderMode: ui.orderMode,
       auction: ui.auctionMode,
     });
     ui.draftOrder = game.order.slice(); // capture (matters for random order)
@@ -557,6 +611,7 @@
       order: ui.orderMode,
       auction: ui.auctionMode,
       pace: ui.cpuPace,
+      bench: ui.benchSize,
       chal: ui.challenge,
       chalSeed: ui.chalSeed,
     };
@@ -576,6 +631,7 @@
     if (cfg.order != null) ui.orderMode = cfg.order;
     if (cfg.auction != null) ui.auctionMode = cfg.auction;
     if (cfg.pace != null) ui.cpuPace = cfg.pace;
+    if (cfg.bench != null) ui.benchSize = cfg.bench;
     if (cfg.chal != null) { ui.challenge = cfg.chal; _dailySet = null; }
     if (cfg.chalSeed != null) { ui.chalSeed = cfg.chalSeed; _dailySet = null; }
     if (Array.isArray(cfg.seatOrder)) ui.draftOrder = cfg.seatOrder;
@@ -739,6 +795,8 @@
     renderPlayerList();
     renderAllRosters();
     renderAuctionPanel();
+
+    saveDraftState();
 
     // Drive automated picks: local/relay CPUs here; live rooms (CPU + failover)
     // via the resilient driver below.
@@ -928,6 +986,76 @@
       renderDraft();
     }
     if (ui.live && ui.roomId && FBSync.setPaused) FBSync.setPaused(ui.roomId, on);
+  }
+
+  // ---- Autosave / resume ----------------------------------------------------
+  // Closing the tab mid-draft used to lose everything; now every pick snapshots
+  // the draft to localStorage and the home screen offers to resume it.
+  const SAVE_KEY = "nbaredraft_save";
+  function saveDraftState() {
+    if (!game || game.isComplete) return;
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        t: Date.now(),
+        live: ui.live,
+        roomId: ui.roomId,
+        online: ui.online,
+        state: ui.live ? null : encodeGameState(),
+        round: game.currentRound(),
+        pick: game.overallPickNumber(),
+        total: game.totalPicks,
+      }));
+    } catch (e) {}
+  }
+  function clearSavedDraft() {
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+  }
+  function initResumeCard() {
+    let save = null;
+    try { save = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+    if (!save || (!save.state && !save.roomId)) return;
+    if (Date.now() - (save.t || 0) > 48 * 3600 * 1000) { clearSavedDraft(); return; } // stale
+    $("#resume-sub").textContent = save.live
+      ? "Live room — rejoin where the group left off."
+      : `Round ${save.round} · Pick ${save.pick} of ${save.total}`;
+    $("#resume-go").onclick = () => {
+      $("#resume-card").classList.add("hidden");
+      if (save.live && save.roomId) {
+        location.hash = "#room=" + save.roomId;
+        if (liveAvailable()) joinLiveRoom(save.roomId);
+        return;
+      }
+      location.hash = "#g=" + save.state;
+      if (loadFromHash()) {
+        ui.online = !!save.online; // keep local drafts local
+        if (!save.online) history.replaceState(null, "", location.pathname + location.search);
+        ui.gameGen++;
+        buildDraftStaticUI();
+        ui.staticBuilt = true;
+        if (game.isComplete) showResults();
+        else { showScreen("#draft-screen"); renderDraft(); }
+      }
+    };
+    $("#resume-discard").onclick = () => { clearSavedDraft(); $("#resume-card").classList.add("hidden"); };
+    $("#resume-card").classList.remove("hidden");
+  }
+
+  // ---- Undo last pick (local drafts) ----------------------------------------
+  function undoLastPick() {
+    if (!game || ui.online || game.isComplete) return;
+    if (!game.pickLog.length || ui.auction) return; // not mid-lot
+    const names = game.managers.map((m) => m.name);
+    const cpu = game.managers.map((m) => m.isCpu);
+    const picks = game.pickLog.slice(0, -1).map((e) =>
+      game.auction ? [e.player.id, e.slot, e.price || 0, e.managerId] : [e.player.id, e.slot]
+    );
+    ui.gameGen++; // kill pending CPU timers so nothing fires into the rewound game
+    ui.auction = null;
+    ui.turnGatePick = null;
+    rebuildGameFrom(names, picks, cpu);
+    ui.announcedCount = game.pickLog.length; // no replayed toast
+    ui.lastPickSeen = game.pickLog.length;
+    renderDraft();
   }
 
   // ========================================================================
@@ -1697,6 +1825,7 @@
     // this device is on the clock.
     const yourTurn = !m.isCpu && (!ui.live || myTurn());
     $("#draft-sticky").classList.toggle("live-turn", yourTurn);
+    $("#undo-btn").classList.toggle("hidden", ui.online || !game.pickLog.length || !!ui.auction);
     $("#draft-tabs").querySelectorAll(".dt").forEach((b) => {
       if (b._tab === "players") b.classList.toggle("alert", yourTurn);
     });
@@ -1763,12 +1892,12 @@
     if (player.isCoach) {
       // Drafting the coach: nothing left to reserve for.
     } else {
-      const slotsLeftAfter = manager.starters
-        ? STARTER_SLOTS.filter((s) => !manager.starters[s]).length - 1
-        : 0;
-      reserve = Math.max(0, slotsLeftAfter) * minAvailableSalary();
-      // Still need to leave room for a coach if we haven't hired one yet.
-      if (ui.coachMode && !manager.coach) reserve += coachReserve();
+      // Every remaining pick (starters AND bench) needs at least the cheapest
+      // salary; the coach pick (if still owed) is reserved at coach prices.
+      const needCoach = ui.coachMode && !manager.coach;
+      const picksLeftAfter = game.picksRemainingFor(manager) - 1 - (needCoach ? 1 : 0);
+      reserve = Math.max(0, picksLeftAfter) * minAvailableSalary();
+      if (needCoach) reserve += coachReserve();
     }
     return managerSpent(manager) + salaryOf(player) + reserve <= capAmount();
   }
@@ -1853,6 +1982,62 @@
     strip.appendChild(el("span", "qs-hint", "clock expiry drafts from your queue first"));
   }
 
+  // ---- Expandable player detail + compare ----------------------------------
+  const SKILLS = [
+    ["scoring", "Scoring"], ["shooting", "Shooting"], ["playmaking", "Playmaking"],
+    ["rebounding", "Rebounding"], ["perimeterD", "Perim D"], ["interiorD", "Interior D"],
+    ["athleticism", "Athletic"], ["iq", "IQ"],
+  ];
+  const skillBar = (label, v, v2) =>
+    `<div class="skill"><span class="sk-label">${label}</span>` +
+    `<span class="bar"><i style="width:${v}%"></i></span><b class="sk-v">${v}</b>` +
+    (v2 != null ? `<span class="bar b2"><i style="width:${v2}%"></i></span><b class="sk-v">${v2}</b>` : "") +
+    `</div>`;
+  function playerDetailHtml(p) {
+    const bars = SKILLS.map(([k, lbl]) => skillBar(lbl, p.ratings[k])).join("");
+    const c = p.career, e = p.ext || {};
+    const facts =
+      `<div class="pd-facts">` +
+      `<span class="tag">Winning ${c.winning}</span><span class="tag">Clutch ${e.clutch}</span>` +
+      `<span class="tag">Usage ${c.ballDominance}</span><span class="tag">Ages ${c.aging}</span>` +
+      `<span class="tag" title="True-shooting proxy">TS ${e.efficiency}</span>` +
+      `<span class="tag" title="Turnover-proneness (lower = better)">TOV ${e.turnovers}</span>` +
+      `<span class="tag">Injury ${p.injuryRisk}</span>` +
+      `<span class="tag">Eras ${(p.eras || []).join("/")}</span>` +
+      `</div>`;
+    return `<div class="skill-grid">${bars}</div>${facts}`;
+  }
+  function toggleExpand(pid) {
+    ui.expandedPid = ui.expandedPid === pid ? null : pid;
+    renderPlayerList();
+  }
+  function pickCompare(p) {
+    if (!ui.comparePid || ui.comparePid === p.id) {
+      ui.comparePid = p.id;
+      renderPlayerList(); // shows the "comparing…" state on the button
+      return;
+    }
+    const A = findDraftable(ui.comparePid);
+    ui.comparePid = null;
+    openCompareModal(A, p);
+    renderPlayerList();
+  }
+  function openCompareModal(A, B) {
+    if (!A || !B) return;
+    $("#slot-modal-title").textContent = `${A.name} vs ${B.name}`;
+    $("#slot-modal-sub").innerHTML =
+      `<span class="cmp-key"><i class="cmp-a"></i>${A.name} (${careerRating(A)})` +
+      ` &nbsp; <i class="cmp-b"></i>${B.name} (${careerRating(B)})</span>`;
+    const wrap = $("#slot-options");
+    wrap.innerHTML =
+      `<div class="skill-grid cmp">` +
+      SKILLS.map(([k, lbl]) => skillBar(lbl, A.ratings[k], B.ratings[k])).join("") +
+      skillBar("Clutch", (A.ext || {}).clutch || 70, (B.ext || {}).clutch || 70) +
+      skillBar("Winning", A.career.winning, B.career.winning) +
+      `</div>`;
+    $("#slot-modal").classList.remove("hidden");
+  }
+
   function renderPlayerList() {
     const m = game.currentManager();
     const cpuOnClock = m.isCpu;
@@ -1913,6 +2098,12 @@
           </div>`;
       }
 
+      // Tap the name/stats area to unfold the full scouting card.
+      if (!p.isCoach) {
+        meta.classList.add("expandable");
+        meta.onclick = () => toggleExpand(p.id);
+      }
+
       const actions = el("div", "player-actions");
       // Star/queue toggle (players only; any human can plan ahead).
       if (!p.isCoach && !cpuOnClock) {
@@ -1942,6 +2133,19 @@
       row.appendChild(photo);
       row.appendChild(meta);
       row.appendChild(actions);
+      // Unfolded scouting card: full skill bars + compare.
+      if (!p.isCoach && ui.expandedPid === p.id) {
+        const det = el("div", "p-detail", playerDetailHtml(p));
+        const cmp = el(
+          "button",
+          "btn mini",
+          ui.comparePid === p.id ? "⚖️ Comparing… tap another player's Compare" : "⚖️ Compare"
+        );
+        cmp.onclick = () => pickCompare(p);
+        det.appendChild(cmp);
+        row.appendChild(det);
+        row.classList.add("expanded");
+      }
       frag.appendChild(row);
     });
     list.appendChild(frag);
@@ -2192,6 +2396,9 @@
       card.appendChild(head);
 
       STARTER_SLOTS.forEach((slot) => card.appendChild(slotRow(slot, m.starters[slot])));
+      for (let bi = 0; bi < ui.benchSize; bi++) {
+        card.appendChild(slotRow("B" + (bi + 1), (m.bench || [])[bi] || null));
+      }
       if (ui.coachMode) {
         const crow = el("div", "slot-row coach-slot-row" + (m.coach ? "" : " empty"));
         crow.appendChild(el("div", "slot-key", "🧠"));
@@ -2237,12 +2444,15 @@
     }));
     results.sort((a, b) => b.eval.composite - a.eval.composite);
     ui.resultTeam = 0; // default to the champion's analysis
+    clearSavedDraft(); // the draft is finished — nothing to resume
 
     renderPodium(results);
     renderBracket(results, false);
     renderDraftGrades();
     renderResultsDetail(results);
     initLegendsUI(results);
+    initRecapButton(results);
+    renderDailyLeaderboard(results);
     showScreen("#results-screen");
 
     // Pop the final standings the moment the draft ends: who won, in what
@@ -2316,6 +2526,7 @@
         return `<div class="bk-round"><div class="bk-round-name">${roundName(i)}</div>${cards}</div>`;
       })
       .join("");
+    ui._bracket = { champ: br.champion.name, mvp: br.mvp }; // for the share recap
     wrap.innerHTML =
       `<div class="res-subhead">Simulated postseason — seeded by projected record (upsets happen!)</div>` +
       `<div class="bk-rounds">${roundsHtml}</div>` +
@@ -2350,6 +2561,7 @@
     });
     const steal = graded.slice().sort((a, b) => b.score - a.score)[0];
     const reach = graded.slice().sort((a, b) => a.score - b.score)[0];
+    ui._steal = { name: steal.e.player.name, pick: steal.e.overall }; // for the recap
     const priceTag = (e) => (game.auction && e.price != null ? ` ($${e.price})` : "");
     const GPA = { "A+": 4.3, A: 4, "A-": 3.7, "B+": 3.3, B: 3, "C+": 2.3, C: 2, D: 1, F: 0 };
     const teams = game.managers
@@ -2393,8 +2605,42 @@
       grid.appendChild(b);
     });
     opts.appendChild(grid);
+    // …or settle it with a rival from THIS draft.
+    if (results.length > 1) {
+      opts.appendChild(el("div", "lg-label", "🥊 Or fight a drafted rival"));
+      const rgrid = el("div", "lg-grid");
+      results.forEach((r, i) => {
+        const b = el("button", "btn mini lg-squad", `${r.manager.isCpu ? "🤖 " : ""}${r.manager.name}`);
+        b.onclick = () => {
+          const meIdx = parseInt(teamSel.value, 10) || 0;
+          if (meIdx === i) return;
+          runRivalSeries(results[meIdx], results[i]);
+        };
+        rgrid.appendChild(b);
+      });
+      opts.appendChild(rgrid);
+    }
     $("#legends-result").innerHTML = "";
     $("#legends-modal").classList.remove("hidden");
+  }
+
+  /** Head-to-head: two drafted teams, best-of-7 + Monte-Carlo win odds. */
+  function runRivalSeries(rA, rB) {
+    const A = profileOf(rA);
+    const B = profileOf(rB);
+    const pct = Math.round(POSTSEASON.seriesWinPct(A, B, 400) * 100);
+    const rnd = POSTSEASON.mulberry32(POSTSEASON.hashStr(A.name + "vs" + B.name + draftSeedString()));
+    const hi = A.strength >= B.strength ? A : B;
+    const lo = hi === A ? B : A;
+    const s = POSTSEASON.simSeries(hi, lo, rnd);
+    const log = s.games
+      .map((g) => `<div class="bk-game">G${g.g}: <b>${g.winner}</b>${g.close ? " (nail-biter)" : ""} — ${g.star} ${g.pts} pts</div>`)
+      .join("");
+    $("#legends-result").innerHTML =
+      `<div class="lg-pct">${A.name} beats ${B.name} in <b>${pct}%</b> of best-of-7s</div>` +
+      `<div class="lg-bar"><i style="width:${pct}%"></i></div>` +
+      `<div class="bk-series"><div class="bk-line">Showcase series</div>` +
+      `<div class="bk-win">→ <b>${s.winner.name}</b> ${s.score}</div>${log}</div>`;
   }
   function runLegendSeries(r, sq) {
     const mine = profileOf(r);
@@ -2471,6 +2717,98 @@
     setTimeout(() => wrap.remove(), 5500);
   }
 
+  /** Wordle-style emoji recap, built for pasting into the group chat. */
+  function initRecapButton(results) {
+    $("#copy-recap").onclick = () => {
+      const win = results[0];
+      const chalLabel =
+        ui.challenge === "daily60" ? " · 🎲 Daily 60" :
+        ui.challenge === "nostars" ? " · 🚫⭐ No Superstars" : "";
+      const typeLabel = game.auction ? "🔨 Auction" : "Snake draft";
+      const meIdx = ui.live && ui.mySeat != null ? results.findIndex((r) => r.manager.id === ui.mySeat) : -1;
+      const lines = [
+        `🏀 NBA Re-Draft — ${new Date().toLocaleDateString()} · ${typeLabel}${chalLabel}`,
+        `🥇 ${win.manager.name}: ${win.eval.avgRecord} avg · ${win.eval.championships} title${win.eval.championships === 1 ? "" : "s"} · composite ${Math.round(win.eval.composite)}`,
+      ];
+      if (meIdx > 0) lines.push(`😤 I finished ${ordinal(meIdx + 1)} of ${results.length}`);
+      if (ui._steal) lines.push(`💎 Steal: ${ui._steal.name} at pick #${ui._steal.pick}`);
+      if (ui._bracket) lines.push(`⚔️ Sim playoffs: ${ui._bracket.champ} win it · MVP ${ui._bracket.mvp}`);
+      lines.push(location.origin + location.pathname + "#g=" + encodeGameState());
+      const text = lines.join("\n");
+      const btn = $("#copy-recap");
+      const done = () => {
+        btn.textContent = "✅ Recap copied — paste it in the chat!";
+        setTimeout(() => (btn.textContent = "📣 Copy recap for the group chat"), 2600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, () => prompt("Copy this recap:", text));
+      } else {
+        prompt("Copy this recap:", text);
+      }
+    };
+  }
+
+  /** Daily 60 leaderboard (Firebase): submit your best human team, see top 20. */
+  function renderDailyLeaderboard(results) {
+    const box = $("#daily-lb");
+    if (ui.challenge !== "daily60" || !liveAvailable()) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    const seed = ui.chalSeed || new Date().toISOString().slice(0, 10);
+    const humans = results.filter((r) => !r.manager.isCpu);
+    const mine = humans.length ? humans.reduce((a, b) => (b.eval.composite > a.eval.composite ? b : a)) : null;
+    const submittedKey = "nbaredraft_lb_" + seed;
+    box.classList.remove("hidden");
+    box.innerHTML = `<div class="res-subhead">🎲 Daily 60 — today's leaderboard</div><div class="lb-body muted">Loading scores…</div>`;
+
+    const paint = (scores) => {
+      const body = box.querySelector(".lb-body");
+      if (!body) return;
+      const rows = Object.values(scores || {})
+        .filter((e) => Array.isArray(e) && e.length >= 2)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 20);
+      let submitted = null;
+      try { submitted = localStorage.getItem(submittedKey); } catch (e) {}
+      let html = rows.length
+        ? rows.map((e, i) =>
+            `<div class="lb-row${submitted && e[0] === submitted ? " me" : ""}">` +
+            `<span class="lb-rank">${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "#" + (i + 1)}</span>` +
+            `<span class="lb-name">${String(e[0]).slice(0, 24)}</span><span class="lb-score">${Math.round(e[1])}</span></div>`
+          ).join("")
+        : `<p class="muted">No scores yet today — be the first!</p>`;
+      if (mine && !submitted) {
+        html += `<button class="btn primary lb-submit">Post my score — ${mine.manager.name}: ${Math.round(mine.eval.composite)}</button>`;
+      } else if (submitted) {
+        html += `<p class="muted" style="margin-top:6px">✅ Score posted as <b>${submitted}</b>. Come back tomorrow!</p>`;
+      }
+      body.classList.remove("muted");
+      body.innerHTML = html;
+      const sub = body.querySelector(".lb-submit");
+      if (sub) {
+        sub.onclick = () => {
+          const nm = (typeof prompt === "function" && prompt("Name for the leaderboard:", mine.manager.name)) || mine.manager.name;
+          FBSync.submitScore(seed, [String(nm).slice(0, 24), Math.round(mine.eval.composite), Date.now()])
+            .then(() => {
+              try { localStorage.setItem(submittedKey, String(nm).slice(0, 24)); } catch (e) {}
+              FBSync.fetchScores(seed).then(paint);
+            })
+            .catch(() => alert("Couldn't post the score — check your Firebase rules allow /leaderboards."));
+        };
+      }
+    };
+    FBSync.fetchScores(seed).then((s) => {
+      if (s === null) {
+        const body = box.querySelector(".lb-body");
+        if (body) body.innerHTML = `<p class="muted">Leaderboard unavailable (Firebase rules must allow <code>/leaderboards</code>).</p>`;
+        return;
+      }
+      paint(s);
+    });
+  }
+
   function renderPodium(results) {
     const wrap = $("#results-podium");
     wrap.innerHTML = "";
@@ -2527,6 +2865,16 @@
             <span class="res-prate">${careerRating(p)}</span>
           </div>`;
       }).join("");
+      for (let bi = 0; bi < ui.benchSize; bi++) {
+        const bp = (m.bench || [])[bi];
+        rosterRows += bp
+          ? `<div class="res-slot"><span class="res-pos">B${bi + 1}</span>
+               <span class="res-pname">${tierBadge(bp)} ${bp.name}</span>
+               ${_gradeById && _gradeById.get(bp.id) ? `<span class="res-grade">${_gradeById.get(bp.id)}</span>` : ""}
+               <span class="res-ptag">bench</span>
+               <span class="res-prate">${careerRating(bp)}</span></div>`
+          : `<div class="res-slot empty"><span class="res-pos">B${bi + 1}</span><span class="res-pname">— empty —</span></div>`;
+      }
       if (ui.coachMode) {
         rosterRows += m.coach
           ? `<div class="res-slot coach"><span class="res-pos">🧠</span>

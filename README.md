@@ -64,6 +64,25 @@ No install, no backend, no internet required. Just open the page.
 - **CPU pace** — choose ⚡ **Fast** (snappy CPU picks and bids) or 🐢 **Relaxed** (more time between CPU bids and picks), so auctions give you room to react. In auctions your **team's remaining budget and bid controls** (+$1 / +$5 / +$10 / Max / custom) are front-and-center.
 - **Pinned draft HUD** — your **open positions of need** (PG SG SF PF C, + 🧠) and your **budget spent / remaining** ride in the frozen header at all times. In auctions the **bid controls are pinned** in that header too, so you never scroll to re-bid.
 - **Auction nomination timer** — the pick clock becomes a per-turn nomination timer (e.g. 1:00 to put a player on the block; auto-nominates on expiry). Any player can **⏸ pause the draft** at any time (syncs to the whole room online). After you win a bid you **choose which slot** the player fills (locked mode).
+- **Quick Start presets** — one-tap cards (🏆 Classic Snake, 💰 Auction Night,
+  🎲 Daily Challenge, ⚡ Quick vs CPUs) fill the whole setup form; everything
+  stays tweakable underneath.
+- **Autosave & resume** — every pick snapshots the draft to your device; if the
+  tab dies mid-draft, the home screen offers "▶ Resume your draft (Round 4,
+  Pick 13)". Live rooms offer a one-tap rejoin.
+- **↩ Undo** — local drafts can take back the last pick (misclick insurance).
+- **📣 Share recap** — one tap copies a group-chat-ready summary (champion,
+  record, steal of the draft, sim-playoff winner + results link).
+- **🥊 Head-to-head rivals** — the Legends modal now also pits any two drafted
+  teams against each other: win odds + a showcase best-of-7.
+- **🎲 Daily 60 leaderboard** — post your composite to today's shared board
+  (Firebase; see FIREBASE_SETUP.md for the one-line rules addition).
+- **Scouting cards** — tap any player row to unfold full skill bars, efficiency,
+  injury and era detail; ⚖️ compare two players side-by-side.
+- **Installable app** — a PWA manifest + service worker: add it to your home
+  screen and play offline.
+- **Bench (+2)** — optional two bench rounds; bench players cover faded starters
+  in the projection and count against the cap (not available in auctions).
 - **One-team results** — the results screen shows a **team selector**; tap a team to see just their analysis, so the breakdown isn't a wall of every roster at once.
 - **Position rules** — **Locked** (you assign each pick to a fixed open slot) or
   **Flexible** (draft freely; the lineup automatically re-arranges across

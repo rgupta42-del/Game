@@ -158,3 +158,16 @@ game). It does **not** expose anything else in your project.
 
 Free tier (the **Spark** plan) is far more than enough for drafting — you won't
 be charged. If you ever want to tear it down, just delete the Firebase project.
+
+
+## Daily 60 leaderboard (optional)
+
+The Daily 60 challenge posts scores to `/leaderboards/{date}`. Add this to your
+Realtime Database rules alongside the `drafts` block:
+
+```json
+"leaderboards": {
+  ".read": true,
+  ".write": true
+}
+```

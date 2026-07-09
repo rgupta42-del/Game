@@ -210,13 +210,18 @@ class DraftGame {
   /** (Flexible mode) the slots a player could occupy in SOME legal full lineup. */
   _flexibleSlots(manager, player) {
     if (!this.isAvailable(player.id)) return [];
-    const current = this._starterList(manager);
-    if (current.length >= STARTER_SLOTS.length) return [];
-    const players = current.concat(player);
     const out = [];
-    for (const s of player.eligible) {
-      if (!STARTER_SLOTS.includes(s)) continue;
-      if (this._match(players, { player, slot: s })) out.push(s);
+    const current = this._starterList(manager);
+    if (current.length < STARTER_SLOTS.length) {
+      const players = current.concat(player);
+      for (const s of player.eligible) {
+        if (!STARTER_SLOTS.includes(s)) continue;
+        if (this._match(players, { player, slot: s })) out.push(s);
+      }
+    }
+    // Bench is open in flexible mode too (any player can sit).
+    if (manager.bench.length < this.benchSize && !this.mustFillStarter(manager)) {
+      out.push("BENCH");
     }
     return out;
   }
@@ -298,6 +303,13 @@ class DraftGame {
   _draftFlexible(manager, player, preferSlot) {
     if (!this.isAvailable(player.id)) {
       throw new Error(`${player.name} is no longer available.`);
+    }
+    const benchRoom = manager.bench.length < this.benchSize;
+    const fiveFull = this._starterList(manager).length >= STARTER_SLOTS.length;
+    // Explicit bench pick — or the five are set, so the bench is all that's left.
+    if ((preferSlot === "BENCH" && benchRoom && !this.mustFillStarter(manager)) || (fiveFull && benchRoom)) {
+      manager.bench.push(player);
+      return this._record(manager, player, "BENCH");
     }
     const current = this._starterList(manager);
     if (current.length >= STARTER_SLOTS.length) {

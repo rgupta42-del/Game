@@ -93,6 +93,20 @@
       return this._ref(roomId).child("seats/" + seatIndex).set(name);
     },
 
+    // ---- Daily-challenge leaderboard ---------------------------------------
+    /** Post a score to today's Daily 60 board: [name, composite, clientTs]. */
+    submitScore(seed, entry) {
+      if (!this._init()) return Promise.reject(new Error("Firebase unavailable"));
+      return this._db.ref("leaderboards/" + seed).push(entry);
+    },
+    /** Read today's board (object of pushId → entry, or null). */
+    fetchScores(seed) {
+      if (!this._init()) return Promise.resolve(null);
+      return this._db.ref("leaderboards/" + seed).once("value")
+        .then((s) => s.val())
+        .catch(() => null);
+    },
+
     /** Pause / resume the whole room (all devices freeze). */
     setPaused(roomId, on) {
       if (!this._init()) return Promise.resolve();
