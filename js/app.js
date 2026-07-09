@@ -905,8 +905,14 @@
         // CPU turns are handled elsewhere; only auto-act for a human who let the
         // clock expire — auto-NOMINATE in an auction, otherwise auto-pick.
         if (cur && !cur.isCpu) {
-          if (game.auction && !ui.auction) autoNominate(cur);
-          else autoPick(cur);
+          if (game.auction) {
+            // Auction: expiry only auto-NOMINATES; if a lot is already live the
+            // hammer clock governs — a free autoPick here would hand out a
+            // player with no bid and no price (the "$0 Barkley" bug).
+            if (!ui.auction) autoNominate(cur);
+          } else {
+            autoPick(cur);
+          }
         }
       }
     }, 1000);
@@ -1128,49 +1134,80 @@
   /** Pinned live-auction bid controls in the sticky header (never scroll to bid). */
   function renderAuctionBidbar() {
     const bar = $("#auction-bidbar");
-    if (!game || !game.auction || !ui.auction) { bar.classList.add("hidden"); bar.innerHTML = ""; return; }
+    if (!game || !game.auction || !ui.auction) {
+      bar.classList.add("hidden");
+      bar.innerHTML = "";
+      bar._shape = null;
+      return;
+    }
     const a = ui.auction;
     const p = findDraftable(a.pid);
     const leader = game.managers[a.leaderId];
     const me = auctionMe();
-    bar.innerHTML = "";
-
-    const top = el("div", "abb-top");
-    top.appendChild(playerPhoto(p, p.isCoach ? p.overall : careerRating(p)));
-    const info = el("div", "abb-info");
-    const pv = proposedValue(p);
-    info.innerHTML =
-      `<span class="abb-player">${p.isCoach ? "🧠 " : ""}${p.name}</span>` +
-      `<span class="abb-sub">${p.isCoach ? p.style : p.eligible.join("/") + " · Peak " + peakOverall(p)} · value <b>$${pv}</b></span>`;
-    top.appendChild(info);
-    top.appendChild(el("span", "abb-bid", `$${a.bid}<small>${leader.isCpu ? "🤖 " : ""}${leader.name}</small>`));
-    top.appendChild(el("span", "abb-clock", ""));
-    bar.appendChild(top);
-
-    const controls = el("div", "abb-controls");
     const meLeading = me && me.id === a.leaderId;
     const meMax = me ? Math.max(0, maxBid(me)) : 0;
     const meCanBid = me && canBid(me, p) && !meLeading && meMax >= a.bid + 1;
-    if (meLeading) {
-      controls.appendChild(el("span", "abb-note", "👑 You hold the high bid"));
-    } else if (meCanBid) {
-      const plus = el("button", "btn primary abb-btn lead", `+$1 → $${a.bid + 1}`);
-      plus.onclick = () => placeBid(me.id, a.bid + 1);
-      controls.appendChild(plus);
-      const maxBtn = el("button", "btn abb-btn", `Max $${meMax}`);
-      maxBtn.onclick = () => placeBid(me.id, meMax);
-      controls.appendChild(maxBtn);
-      const inp = el("input", "abb-amt");
-      inp.type = "text";
-      inp.placeholder = "$";
-      controls.appendChild(inp);
-      const bidBtn = el("button", "btn abb-btn", "Bid");
-      bidBtn.onclick = () => { const v = parseInt(inp.value, 10); if (v) placeBid(me.id, v); };
-      controls.appendChild(bidBtn);
-    } else {
-      controls.appendChild(el("span", "abb-note muted", me && meMax < a.bid + 1 ? "💰 Maxed out on this player" : "Watching…"));
+
+    // PATCH IN PLACE whenever possible: rebuilding the DOM on every CPU bid
+    // destroys the button mid-tap (the "my +$1 didn't register" bug). We only
+    // rebuild when the lot or my bidding state actually changes shape.
+    const shape = a.pid + "|" + (meLeading ? "L" : meCanBid ? "B" : "W");
+    if (bar._shape !== shape) {
+      bar._shape = shape;
+      bar.innerHTML = "";
+
+      const top = el("div", "abb-top");
+      top.appendChild(playerPhoto(p, p.isCoach ? p.overall : careerRating(p)));
+      const info = el("div", "abb-info");
+      const pv = proposedValue(p);
+      info.innerHTML =
+        `<span class="abb-player">${p.isCoach ? "🧠 " : ""}${p.name}</span>` +
+        `<span class="abb-sub">${p.isCoach ? p.style : p.eligible.join("/") + " · Peak " + peakOverall(p)} · value <b>$${pv}</b></span>`;
+      top.appendChild(info);
+      top.appendChild(el("span", "abb-bid", ""));
+      top.appendChild(el("span", "abb-clock", ""));
+      bar.appendChild(top);
+
+      const controls = el("div", "abb-controls");
+      if (meLeading) {
+        controls.appendChild(el("span", "abb-note", "👑 You hold the high bid"));
+      } else if (meCanBid) {
+        // Amounts are read at CLICK time, so a CPU raise between render and tap
+        // turns your press into a valid next-dollar bid instead of a dud.
+        const plus = el("button", "btn primary abb-btn abb-plus", "");
+        plus.onclick = () => {
+          const cur = ui.auction;
+          if (cur && me) placeBid(me.id, cur.bid + 1);
+        };
+        controls.appendChild(plus);
+        const maxBtn = el("button", "btn abb-btn abb-max", "");
+        maxBtn.onclick = () => {
+          if (ui.auction && me) placeBid(me.id, Math.max(0, maxBid(me)));
+        };
+        controls.appendChild(maxBtn);
+        const inp = el("input", "abb-amt");
+        inp.type = "text";
+        inp.placeholder = "$";
+        controls.appendChild(inp);
+        const bidBtn = el("button", "btn abb-btn", "Bid");
+        bidBtn.onclick = () => {
+          const v = parseInt(inp.value, 10);
+          if (v && me) placeBid(me.id, v);
+        };
+        controls.appendChild(bidBtn);
+      } else {
+        controls.appendChild(el("span", "abb-note muted", me && meMax < a.bid + 1 ? "💰 Maxed out on this player" : "Watching…"));
+      }
+      bar.appendChild(controls);
     }
-    bar.appendChild(controls);
+
+    // Update the live numbers without touching the tappable nodes.
+    const bidEl = bar.querySelector(".abb-bid");
+    if (bidEl) bidEl.innerHTML = `$${a.bid}<small>${leader.isCpu ? "🤖 " : ""}${leader.name}</small>`;
+    const plusEl = bar.querySelector(".abb-plus");
+    if (plusEl) plusEl.textContent = `+$1 → $${a.bid + 1}`;
+    const maxEl = bar.querySelector(".abb-max");
+    if (maxEl) maxEl.textContent = `Max $${meMax}`;
     bar.classList.remove("hidden");
     updateAuctionClock();
   }
@@ -1198,6 +1235,7 @@
       FBSync.setAuction(ui.roomId, { pid: player.id, bid: 1, leaderId: opener.id, ts: Date.now() });
       return;
     }
+    stopClock(); // the nomination timer ends when the lot opens — the hammer clock takes over
     ui.auction = { pid: player.id, bid: 1, leaderId: opener.id, gen: ui.gameGen, vals: {}, deadline: auctionGrace(), timer: null };
     armAuctionClock();
     if (ui.auction) scheduleAuctionCpus();
@@ -1231,17 +1269,20 @@
     updateAuctionClock();
   }
 
-  /** True (and sells) when no one except the leader can even bid. */
+  /** Instant hammer — ONLY in all-CPU games (nobody is watching the theater).
+   *  With any human present, every lot runs the full going-once/going-twice
+   *  countdown so people always see the sale coming and can react. */
   function autoSellIfUncontested() {
     const a = ui.auction;
     if (!a) return false;
+    if (game.managers.some((m) => !m.isCpu)) return false; // humans get the show
     const p = findDraftable(a.pid);
-    const rivals = eligibleBidders(p).filter((m) => m.id !== a.leaderId && maxBid(m) >= a.bid + 1);
-    const humanRival = rivals.some((m) => !m.isCpu);
-    const cpuRival = rivals.some(
-      (m) => m.isCpu && (a.vals[m.id] != null ? a.vals[m.id] : (a.vals[m.id] = cpuValuation(m, p))) >= a.bid + 1
+    const cpuRival = game.managers.some(
+      (m) =>
+        m.isCpu && m.id !== a.leaderId && canBid(m, p) && maxBid(m) >= a.bid + 1 &&
+        (a.vals[m.id] != null ? a.vals[m.id] : (a.vals[m.id] = cpuValuation(m, p))) >= a.bid + 1
     );
-    if (!humanRival && !cpuRival) {
+    if (!cpuRival) {
       sellCurrent();
       return true;
     }
@@ -1361,7 +1402,7 @@
       const act = el("div", "au-actions");
       if (able) {
         const plus = el("button", "btn primary mini", `+$1 → $${a.bid + 1}`);
-        plus.onclick = () => placeBid(m.id, a.bid + 1);
+        plus.onclick = () => { const cur = ui.auction; if (cur) placeBid(m.id, cur.bid + 1); };
         act.appendChild(plus);
         const inp = el("input", "au-amt");
         inp.type = "text";
