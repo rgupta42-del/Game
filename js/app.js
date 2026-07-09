@@ -403,9 +403,17 @@
     // Room-wide pause: everyone freezes together.
     const roomPaused = !!data.paused;
     if (roomPaused !== ui.paused) {
+      const wasPaused = ui.paused;
       ui.paused = roomPaused;
       $("#pause-btn").textContent = roomPaused ? "▶" : "⏸";
       $("#pause-banner").classList.toggle("hidden", !roomPaused);
+      // Host refreshes the live lot's clock when ANYONE resumes, so time spent
+      // paused never counts against the hammer.
+      if (wasPaused && !roomPaused && ui.isHost && ui.auction && ui.auction.live) {
+        FBSync.setAuction(ui.roomId, {
+          pid: ui.auction.pid, bid: ui.auction.bid, leaderId: ui.auction.leaderId, ts: Date.now(),
+        });
+      }
     }
 
     if (!ui.staticBuilt) {
@@ -987,8 +995,25 @@
       if (ui.auction && ui.auction.timer) clearInterval(ui.auction.timer);
       if (ui._auTimer) clearInterval(ui._auTimer);
     } else if (game && !game.isComplete) {
-      // Re-arm clocks + CPU drivers for whatever's on the block.
-      if (ui.auction && !ui.auction.live) armAuctionClock();
+      // Re-arm EVERYTHING for whatever's on the block. CPU bid timers that
+      // fired during the pause were discarded, so they must be rescheduled —
+      // otherwise the lot just runs out the clock at the paused price.
+      if (ui.auction && !ui.auction.live) {
+        armAuctionClock();
+        if (ui.auction) scheduleAuctionCpus();
+      }
+      if (ui.auction && ui.auction.live) {
+        // Live lots count down from a wall-clock timestamp; refresh it so the
+        // time spent paused doesn't count against the lot (host writes).
+        if (ui.isHost) {
+          FBSync.setAuction(ui.roomId, {
+            pid: ui.auction.pid, bid: ui.auction.bid, leaderId: ui.auction.leaderId, ts: Date.now(),
+          });
+        }
+        ui.auction.ts = Date.now();
+        startLiveAuctionTicker();
+        hostDriveAuctionCpus();
+      }
       renderDraft();
     }
     if (ui.live && ui.roomId && FBSync.setPaused) FBSync.setPaused(ui.roomId, on);
