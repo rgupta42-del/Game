@@ -93,9 +93,7 @@ select:focus, input:focus { border-color: var(--accent-2); }
   text-transform: uppercase; color: var(--accent);
   border: 1px solid rgba(255,107,53,0.45); background: rgba(255,107,53,0.08);
   border-radius: 999px; padding: 6px 14px; margin-bottom: 16px;
-  animation: herofloat 3.2s ease-in-out infinite;
 }
-@keyframes herofloat { 50% { transform: translateY(-4px); } }
 .hchip { transition: transform 0.12s ease, border-color 0.12s ease; }
 .hchip:hover { transform: translateY(-2px); border-color: var(--accent-2); }
 .hero-title { margin: 0 0 12px; font-size: clamp(30px, 6vw, 52px); line-height: 1.08; letter-spacing: -0.5px; font-weight: 900; }
@@ -141,23 +139,30 @@ select:focus, input:focus { border-color: var(--accent-2); }
   .sc-cols { grid-template-columns: 1fr; }
 }
 
-/* Big glowing start CTA */
+/* Big start CTA (static — motion is reserved for your-turn moments) */
 .start-cta {
   margin-top: 16px; font-size: 18px; font-weight: 900; letter-spacing: 0.3px;
-  box-shadow: 0 0 24px rgba(255,107,53,0.35);
-  animation: ctaglow 2.4s ease-in-out infinite;
-}
-@keyframes ctaglow {
-  50% { box-shadow: 0 0 40px rgba(255,107,53,0.55); }
+  box-shadow: 0 0 20px rgba(255,107,53,0.3);
 }
 
-/* draft: pick clock + cap status */
+/* Advanced setup options: collapsed by default — presets cover most games. */
+.advanced-setup { margin-top: 14px; }
+.advanced-setup > summary {
+  cursor: pointer; list-style: none; font-weight: 800; font-size: 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 18px; box-shadow: var(--shadow);
+}
+.advanced-setup > summary::-webkit-details-marker { display: none; }
+.advanced-setup > summary::after { content: "▾"; float: right; color: var(--muted); }
+.advanced-setup[open] > summary { border-radius: var(--radius) var(--radius) 0 0; }
+.advanced-setup[open] > summary::after { content: "▴"; }
+.advanced-setup .adv-sub { font-weight: 500; font-size: 12px; color: var(--muted); margin-left: 8px; }
+.advanced-setup[open] .setup-grid { margin-top: 10px; }
+
+/* draft: pick clock */
 .pick-clock { display: grid; place-items: center; min-width: 64px; height: 52px; padding: 0 12px; border-radius: 12px; background: #11141a; border: 2px solid var(--accent-2); font-size: 24px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .pick-clock.warn { border-color: var(--bad); color: var(--bad); animation: clockpulse 1s infinite; }
 @keyframes clockpulse { 50% { opacity: 0.5; } }
-.cap-status { font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
-.cap-status b { color: var(--good); }
-.cap-status.over b { color: var(--bad); }
 .tag.salary { color: var(--good); }
 .tag.salary.unaffordable { color: var(--bad); }
 
@@ -211,7 +216,7 @@ select:focus, input:focus { border-color: var(--accent-2); }
 }
 .draft-tabs .dt.alert:not(.active)::after {
   content: ""; position: absolute; top: 6px; right: 8px; width: 8px; height: 8px;
-  border-radius: 50%; background: var(--accent); animation: clockpulse 1s infinite;
+  border-radius: 50%; background: var(--accent);
 }
 
 /* Tab panels: exactly one section on screen at a time. */
@@ -425,10 +430,6 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .upcoming-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .up-chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 20px; padding: 4px 10px; font-size: 12px; color: var(--muted); }
 .up-chip b { color: var(--text); }
-.must-fill {
-  width: 100%; background: rgba(255,176,32,0.12); border: 1px solid var(--warn);
-  color: var(--warn); padding: 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 600;
-}
 
 /* ---------------- Results actions ---------------- */
 .results-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
@@ -463,29 +464,20 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .db-cell:last-child { border-radius: 0 0 8px 8px; }
 .db-cell.empty { color: var(--muted); font-style: italic; }
 .db-cell.current {
-  background: rgba(255,107,53,0.14); box-shadow: 0 0 0 1px var(--accent) inset;
-  animation: cellglow 1.6s ease-in-out infinite;
+  background: rgba(255,107,53,0.16); box-shadow: 0 0 0 1px var(--accent) inset;
 }
-@keyframes cellglow { 50% { background: rgba(255,107,53,0.26); } }
 .db-pick-no { color: var(--muted); font-size: 10px; }
 .db-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .db-sub { color: var(--accent-2); font-size: 11px; }
 
-/* ---------------- Team needs panel ---------------- */
+/* ---------------- Team-needs: one compact target line ---------------- */
 .team-needs {
-  background: linear-gradient(180deg, rgba(74,163,255,0.05), var(--panel-2) 60%);
+  font-size: 13px; line-height: 1.45;
+  background: rgba(74,163,255,0.06);
   border: 1px solid var(--line); border-left: 3px solid var(--accent-2);
-  border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;
+  border-radius: 10px; padding: 8px 12px; margin-bottom: 12px;
 }
-.tn-title { font-weight: 800; font-size: 14px; margin-bottom: 8px; }
-.tn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-.tn-chip { font-size: 11px; padding: 3px 8px; border-radius: 14px; border: 1px solid var(--line); white-space: nowrap; }
-.tn-chip.good { color: var(--good); border-color: rgba(61,220,132,0.4); background: rgba(61,220,132,0.08); }
-.tn-chip.bad { color: var(--warn); border-color: rgba(255,176,32,0.4); background: rgba(255,176,32,0.08); }
-.tn-open { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
-.tn-open b { color: var(--text); }
-.tn-rec { font-size: 13px; line-height: 1.45; background: rgba(74,163,255,0.08); border: 1px solid rgba(74,163,255,0.35); border-radius: 10px; padding: 9px 11px; }
-.tn-rec b { color: var(--accent-2); }
+.team-needs b { color: var(--accent-2); }
 
 .board-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 #search { flex: 1; min-width: 160px; }
@@ -507,10 +499,6 @@ select:focus, input:focus { border-color: var(--accent-2); }
   box-shadow: 0 4px 14px rgba(0,0,0,0.3);
 }
 .player-row.disabled { opacity: 0.4; }
-/* Fresh renders slide in ever so slightly — the board feels alive per pick.
-   (fill: backwards, so the hover lift still works once it finishes) */
-.player-row { animation: rowin 0.16s ease backwards; }
-@keyframes rowin { from { opacity: 0.45; transform: translateY(4px); } }
 /* Best available: the top draftable name gets marquee treatment. */
 .player-row.top-pick {
   border-color: rgba(255,176,32,0.55);
@@ -640,9 +628,8 @@ select:focus, input:focus { border-color: var(--accent-2); }
 }
 .podium-card.rank-1::after {
   content: "👑"; position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
-  font-size: 24px; animation: crownbob 2.2s ease-in-out infinite;
+  font-size: 24px;
 }
-@keyframes crownbob { 50% { transform: translateX(-50%) translateY(-4px); } }
 .podium-rank { font-size: 30px; }
 .podium-name { font-weight: 800; font-size: 18px; margin: 6px 0; }
 .podium-record { color: var(--muted); font-size: 13px; }
@@ -650,6 +637,16 @@ select:focus, input:focus { border-color: var(--accent-2); }
 
 .results-detail { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
 .res-team { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+/* Collapsible analysis sections inside a team card: open what you care about. */
+.res-fold {
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel); padding: 9px 12px; margin-top: 10px;
+}
+.res-fold > summary { cursor: pointer; font-weight: 800; font-size: 13px; list-style: none; }
+.res-fold > summary::-webkit-details-marker { display: none; }
+.res-fold > summary::after { content: "▾"; float: right; color: var(--muted); }
+.res-fold[open] > summary::after { content: "▴"; }
+.res-fold[open] > summary { margin-bottom: 8px; }
 .res-team h4 { margin: 0 0 6px; }
 .res-stats { display: flex; flex-wrap: wrap; gap: 16px; margin: 8px 0; }
 .res-stat { font-size: 13px; }
@@ -721,7 +718,6 @@ select:focus, input:focus { border-color: var(--accent-2); }
   .draft-sticky .sticky-onclock { font-size: 16px; }
   .draft-sticky .pick-clock { height: 40px; min-width: 58px; font-size: 20px; }
   .draft-tabs .dt { padding: 11px 2px; font-size: 12.5px; }
-  .cap-status { font-size: 12px; padding: 5px 9px; }
 
   .share-panel { padding: 10px 12px; }
   .share-turn { font-size: 14px; }
@@ -879,6 +875,7 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .skill .bar.b2 > i { background: linear-gradient(90deg, var(--accent), #ffd54a); }
 .skill .sk-v { width: 22px; text-align: right; font-size: 11px; }
 .pd-facts { display: flex; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+.p-detail .btn { margin-right: 6px; }
 .skill-grid.cmp { grid-template-columns: 1fr; width: 100%; }
 .cmp-key { font-size: 12px; }
 .cmp-key i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin: 0 4px 0 0; vertical-align: middle; }

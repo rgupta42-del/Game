@@ -181,8 +181,8 @@
       ui.mode = e.target.value;
       $("#mode-hint").textContent =
         ui.mode === "online"
-          ? "Each human manager joins on their own device; tick 🤖 for CPU seats (the host's device runs them automatically). Mix humans and CPUs freely."
-          : "Everyone drafts on this device, taking turns. Tick 🤖 for CPU seats.";
+          ? "Each manager joins on their own device via a shared link."
+          : "Everyone drafts on this device, taking turns.";
       $("#start-draft").textContent = ui.mode === "online" ? "Start Online Draft" : "Start Draft";
       renderManagerNameInputs();
     });
@@ -765,8 +765,8 @@
     const url = location.href;
     const btn = $("#copy-link");
     const done = () => {
-      btn.textContent = "✅ Link copied — send it on!";
-      setTimeout(() => (btn.textContent = "🔗 Copy link to send"), 2500);
+      btn.textContent = "✅ Copied";
+      setTimeout(() => (btn.textContent = "🔗 Copy link"), 2500);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(url).then(done, () => prompt("Copy this link:", url));
@@ -1612,21 +1612,20 @@
 
     if (ui.live) {
       // Real-time room: share the link once, then everyone drafts on their turn.
-      copyBtn.textContent = "🔗 Copy room link";
+      copyBtn.textContent = "🔗 Copy link";
       const mine = myTurn();
       const youAre = ui.mySeat != null ? ` — you're ${game.managers[ui.mySeat].name}` : "";
       turnEl.innerHTML = mine
         ? `🟢 <b>Your turn</b> — make your pick below${youAre}`
         : `⏳ Waiting for <b>${m.name}</b> to pick${youAre}`;
-      instrEl.textContent =
-        "Live room — picks sync in real time. Share this link once so each manager can join on their own device.";
+      instrEl.textContent = "Live room — picks sync in real time.";
       renderReactBar();
     } else {
       $("#react-bar").classList.add("hidden");
-      copyBtn.textContent = "🔗 Copy link to send";
+      copyBtn.textContent = "🔗 Copy link";
       turnEl.innerHTML = `🔗 It's <b>${m.name}</b>'s turn`;
       instrEl.textContent =
-        `${m.name}: make your pick below, then copy this link and send it to the next manager so they can take their turn.`;
+        `${m.name}: pick below, then send this link to the next manager.`;
     }
   }
 
@@ -1794,10 +1793,16 @@
       `Rd ${game.currentRound()}/${game.picksPerManager} · Pick ${game.overallPickNumber()}/${game.totalPicks}` +
       (m.isCpu ? " · CPU…" : "");
 
-    // Last-pick ticker (the draft-room "just selected" strip).
+    // ONE contextual note line: a nomination prompt when it's your turn to put
+    // a player on the block, otherwise the last pick. (Open-slot needs and
+    // budget already live in the #my-status pills — no separate banners.)
     const ticker = $("#pick-ticker");
     const last = game.pickLog[game.pickLog.length - 1];
-    if (last) {
+    const humanNominating = game.auction && !ui.auction && !m.isCpu && (!ui.live || myTurn());
+    if (humanNominating) {
+      ticker.innerHTML = `<span class="pt-label">Nominate</span> 🔨 <b>${m.name}</b> — put a player on the block; the highest bid wins.`;
+      ticker.classList.remove("hidden");
+    } else if (last) {
       const slotTxt = last.slot === "COACH" ? "🧠 COACH" : last.slot;
       ticker.innerHTML =
         `<span class="pt-label">Last pick</span> #${last.overall} <b>${last.player.name}</b> · ${slotTxt} → ${last.managerName}`;
@@ -1825,31 +1830,6 @@
       if (b._tab === "players") b.classList.toggle("alert", yourTurn);
     });
 
-    const banner = $("#must-fill-banner");
-    const needStarters = game.unfilledStarterSlots(m);
-    const needCoach = game.needsCoach(m);
-    if (game.auction && ui.auction) {
-      banner.classList.add("hidden"); // lot live: the YOU pills already show needs
-    } else if (game.auction && !ui.auction) {
-      banner.textContent = `🔨 ${m.name}: your nomination — put a player on the block; the highest bid wins them.`;
-      banner.classList.remove("hidden");
-    } else if (needStarters.length || needCoach) {
-      const bits = [];
-      if (needStarters.length) {
-        bits.push(ui.posMode === "flexible"
-          ? `${needStarters.length} starter slot(s)`
-          : needStarters.join(", "));
-      }
-      if (needCoach) bits.push("a head coach 🧠");
-      banner.textContent = `⚠️ ${m.name} still needs: ${bits.join(" · ")}`;
-      banner.classList.remove("hidden");
-    } else {
-      banner.classList.add("hidden");
-    }
-
-    // Budget now lives in the always-visible #my-status strip (renderMyStatus),
-    // so the legacy cap-status line stays hidden to avoid duplication.
-    $("#cap-status").classList.add("hidden");
   }
 
   // What's on the board right now: players within the selected eras, plus the
@@ -1976,7 +1956,7 @@
       chip.onclick = () => toggleQueue(id);
       strip.appendChild(chip);
     });
-    strip.appendChild(el("span", "qs-hint", "clock expiry drafts from your queue first"));
+    strip.appendChild(el("span", "qs-hint", "auto-pick takes these first"));
   }
 
   // ---- Expandable player detail + compare ----------------------------------
@@ -1995,6 +1975,7 @@
     const c = p.career, e = p.ext || {};
     const facts =
       `<div class="pd-facts">` +
+      `<span class="tag">${p.archetype}</span><span class="tag" title="Ball dominance ${c.ballDominance}">${SCORING.usageTier(p)}</span>` +
       `<span class="tag">Winning ${c.winning}</span><span class="tag">Clutch ${e.clutch}</span>` +
       `<span class="tag">Usage ${c.ballDominance}</span><span class="tag">Ages ${c.aging}</span>` +
       `<span class="tag" title="True-shooting proxy">TS ${e.efficiency}</span>` +
@@ -2066,6 +2047,8 @@
         : "";
       const meta = el("div", "player-meta");
 
+      // Slim rows: tier + name + a couple of key tags. Everything else (clutch,
+      // usage, archetype, injury detail…) lives in the tap-to-expand card.
       if (p.isCoach) {
         const t = p.traits;
         const fit = Math.round(coachFit(m, p));
@@ -2074,10 +2057,7 @@
           <div class="psub">
             <span class="tag pos">${p.style}</span>
             ${salTag}
-            <span class="tag" title="Coaching pedigree">Coach ${p.overall}</span>
-            <span class="tag" title="Offensive acumen">Off ${t.off}</span>
-            <span class="tag" title="Defensive acumen">Def ${t.def}</span>
-            <span class="tag" title="Pace / transition">Pace ${t.pace}</span>
+            <span class="tag" title="Pedigree · Off ${t.off} / Def ${t.def} / Pace ${t.pace}">Coach ${p.overall}</span>
             <span class="tag fit">Fit ${fit}</span>
           </div>`;
       } else {
@@ -2088,9 +2068,6 @@
             <span class="tag pos">${p.eligible.join("/")}</span>
             ${salTag}
             <span class="tag" title="Career-peak ability">Peak ${peakOverall(p)}</span>
-            <span class="tag" title="Clutch shot-making">Clutch ${p.ext.clutch}</span>
-            <span class="tag" title="Usage rate (ball dominance ${p.career.ballDominance})">${SCORING.usageTier(p)}</span>
-            <span class="tag">${p.archetype}</span>
             ${ui.sortBy === "fit" || canDraft ? `<span class="tag fit">Fit ${fit}</span>` : ""}
           </div>`;
       }
@@ -2102,14 +2079,6 @@
       }
 
       const actions = el("div", "player-actions");
-      // Star/queue toggle (players only; any human can plan ahead).
-      if (!p.isCoach && !cpuOnClock) {
-        const inQ = ui.queue.includes(p.id);
-        const star = el("button", "btn ghost mini star-btn" + (inQ ? " on" : ""), inQ ? "★" : "☆");
-        star.title = inQ ? "Remove from my queue" : "Add to my queue (auto-pick priority)";
-        star.onclick = () => toggleQueue(p.id);
-        actions.appendChild(star);
-      }
       if (canDraft) {
         const label = game.auction ? "Nominate 🔨" : p.isCoach ? "Hire" : "Draft";
         const btn = el("button", "btn primary mini", label);
@@ -2130,9 +2099,14 @@
       row.appendChild(photo);
       row.appendChild(meta);
       row.appendChild(actions);
-      // Unfolded scouting card: full skill bars + compare.
+      // Unfolded scouting card: full skill bars + queue star + compare.
       if (!p.isCoach && ui.expandedPid === p.id) {
         const det = el("div", "p-detail", playerDetailHtml(p));
+        const inQ = ui.queue.includes(p.id);
+        const star = el("button", "btn mini star-btn" + (inQ ? " on" : ""), inQ ? "★ Queued" : "☆ Queue");
+        star.title = inQ ? "Remove from my queue" : "Add to my queue (auto-pick priority)";
+        star.onclick = () => toggleQueue(p.id);
+        det.appendChild(star);
         const cmp = el(
           "button",
           "btn mini",
@@ -2300,26 +2274,20 @@
     playmaking: "a playmaker", perimeterD: "perimeter defense", rebounding: "rebounding",
   };
 
+  // One compact suggestion line — open slots and budget already live in the
+  // header pills, so this only says who to target and why.
   function renderTeamNeeds() {
     const wrap = $("#team-needs");
-    const m = game.currentManager();
+    // Advise YOUR team in an auction (anyone can win the lot); otherwise the
+    // manager on the clock. Never advise a CPU or someone else's turn.
+    const m = game.auction ? auctionMe() : game.currentManager();
+    if (!m || m.isCpu || (!game.auction && ui.live && !myTurn())) {
+      wrap.classList.add("hidden");
+      wrap.innerHTML = "";
+      return;
+    }
 
     const a = SCORING.analyzeRoster({ starters: m.starters, bench: [] });
-
-    const strengthChips = a.strengths
-      .map((i) => `<span class="tn-chip good" title="${i.have}">✓ ${i.label}</span>`)
-      .join("");
-    const gapChips = a.gaps
-      .map((i) => `<span class="tn-chip bad" title="${i.miss}">✗ ${i.label}</span>`)
-      .join("");
-    const coachChip = game.needsCoach(m) ? `<span class="tn-chip bad">✗ head coach 🧠</span>` : "";
-    const haveRow = strengthChips || `<span class="tn-chip">No picks yet</span>`;
-
-    const openSlots = a.openPositions.slice();
-    if (game.needsCoach(m)) openSlots.push("Coach");
-    const openTxt = openSlots.length ? `<b>${openSlots.join(", ")}</b>` : "all set";
-
-    // Recommend the best player; if only the coach remains, recommend a coach.
     let recHtml;
     const rec = recommendPick(m, a);
     if (rec) {
@@ -2334,12 +2302,8 @@
     } else {
       recHtml = "Your roster is set.";
     }
-
-    wrap.innerHTML =
-      `<div class="tn-title">${m.isCpu ? "🤖 " : ""}${m.name} — what your team has & needs</div>` +
-      `<div class="tn-row">${haveRow}${gapChips}${coachChip}</div>` +
-      `<div class="tn-open">Open: ${openTxt}</div>` +
-      `<div class="tn-rec">${recHtml}</div>`;
+    wrap.innerHTML = recHtml;
+    wrap.classList.remove("hidden");
   }
 
   /** Suggest the best complementary pick available for this roster. */
@@ -2465,8 +2429,8 @@
       const url = location.origin + location.pathname + "#g=" + encodeGameState();
       const btn = $("#share-results");
       const done = () => {
-        btn.textContent = "✅ Results link copied!";
-        setTimeout(() => (btn.textContent = "📋 Copy results link to share"), 2500);
+        btn.textContent = "✅ Link copied!";
+        setTimeout(() => (btn.textContent = "🔗 Share results"), 2500);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(done, () => prompt("Copy this results link:", url));
@@ -2734,8 +2698,8 @@
       const text = lines.join("\n");
       const btn = $("#copy-recap");
       const done = () => {
-        btn.textContent = "✅ Recap copied — paste it in the chat!";
-        setTimeout(() => (btn.textContent = "📣 Copy recap for the group chat"), 2600);
+        btn.textContent = "✅ Copied — paste it in the chat!";
+        setTimeout(() => (btn.textContent = "📣 Copy recap"), 2600);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(done, () => prompt("Copy this recap:", text));
@@ -2898,9 +2862,13 @@
       const coachNoteTxt = SCORING.coachNote(rosterRef);
       const coachItems = coachNoteTxt ? [{ kind: "good", text: coachNoteTxt }] : [];
       const chemItems = coachItems.concat(cons, syn);
+      // Deep-dive sections fold shut by default — the card opens to the stats,
+      // roster and summary; tap a section to drill in.
+      const fold = (title, inner) =>
+        `<details class="res-fold"><summary>${title}</summary>${inner}</details>`;
       const synHtml = chemItems.length
-        ? `<div class="res-subhead">Chemistry, spacing &amp; notable pairings</div>
-           <ul class="res-pairings">${chemItems.map((s) => `<li class="${s.kind}">${s.text}</li>`).join("")}</ul>`
+        ? fold("🧪 Chemistry, spacing &amp; pairings",
+            `<ul class="res-pairings">${chemItems.map((s) => `<li class="${s.kind}">${s.text}</li>`).join("")}</ul>`)
         : "";
 
       // Advanced efficiency read — TS% / turnovers / estimated impact, surfaced
@@ -2911,21 +2879,19 @@
         : `<p class="muted" style="margin:6px 0 0">No efficiency red flags — the shot quality holds up.</p>`;
       const topImp = eff.impacts.slice(0, 2).map((x) => `${x.name} ${x.impact >= 0 ? "+" : ""}${x.impact}`).join(", ");
       const botImp = eff.impacts.slice(-1).map((x) => `${x.name} ${x.impact >= 0 ? "+" : ""}${x.impact}`).join("");
-      const effHtml = `
-        <div class="res-subhead">Advanced efficiency (post-draft reveal)</div>
+      const effHtml = fold("📊 Advanced efficiency (post-draft reveal)", `
         <div class="res-eff">
           <span class="eff-pill" title="Usage-weighted team true-shooting proxy">Team TS ${eff.teamTS}</span>
           <span class="eff-pill" title="Usage-weighted team turnover rate (lower is better)">Team TOV ${eff.teamTOV}</span>
           <span class="eff-pill" title="Estimated plus-minus / on-off impact">Top impact: ${topImp}</span>
           ${eff.impacts.length > 2 ? `<span class="eff-pill" title="Lowest estimated impact starter">Lowest: ${botImp}</span>` : ""}
         </div>
-        ${effNotesHtml}`;
+        ${effNotesHtml}`);
 
       // Prose recap of the 15-year run — highs, lows, what worked & didn't.
       const narrative = SCORING.careerNarrative(rosterRef, ev);
       const narrativeHtml = narrative
-        ? `<div class="res-subhead">The 15-year run</div>
-           <p class="res-narrative">${narrative}</p>`
+        ? fold("📜 The 15-year run", `<p class="res-narrative">${narrative}</p>`)
         : "";
 
       // Win timeline, color-coded by how deep each season went.
@@ -2969,9 +2935,7 @@
         ${synHtml}
         ${effHtml}
         ${narrativeHtml}
-        <div class="res-subhead">15-year win trajectory</div>
-        <div class="timeline">${bars}</div>
-        ${tlLegend}`;
+        ${fold("📈 15-year win trajectory", `<div class="timeline">${bars}</div>${tlLegend}`)}`;
       return team;
     }
   }

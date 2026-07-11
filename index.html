@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="icon" type="image/png" href="icon-192.png" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=33" />
+  <link rel="stylesheet" href="styles.css?v=34" />
 </head>
 <body>
   <header class="topbar">
@@ -72,7 +72,7 @@
         <button class="preset" data-preset="quick"><b>⚡ Quick vs CPUs</b><span>you + 3 CPUs · no clock</span></button>
       </div>
 
-      <!-- Setup, grouped into scannable cards -->
+      <!-- Setup: the essentials up front; everything else folds into Advanced. -->
       <div class="setup-grid">
         <div class="setup-card span-all">
           <h3 class="sc-title">🎮 Who's playing</h3>
@@ -83,17 +83,20 @@
                 <option value="local">Local — pass &amp; play / vs CPU (one device)</option>
                 <option value="online">Online — each manager on their own device (share a link)</option>
               </select>
-              <span class="hint" id="mode-hint">Everyone drafts on this device, taking turns. Tick 🤖 for CPU seats.</span>
+              <span class="hint" id="mode-hint">Everyone drafts on this device, taking turns.</span>
             </div>
             <div class="field">
               <label for="num-managers">Number of managers</label>
               <select id="num-managers"></select>
-              <span class="hint">Each manager drafts a starting five — PG, SG, SF, PF and C. No bench.</span>
             </div>
           </div>
           <div id="manager-names" class="manager-names"></div>
         </div>
+      </div>
 
+      <details id="advanced-setup" class="advanced-setup">
+        <summary>⚙️ Advanced options <span class="adv-sub">clock · draft type · eras · challenges · coach · cap · bench</span></summary>
+        <div class="setup-grid">
         <div class="setup-card">
           <h3 class="sc-title">⏱️ Draft rules</h3>
           <div class="field">
@@ -116,7 +119,7 @@
               <option value="random">Random — fresh order each round</option>
               <option value="auction">🔨 Auction — nominate &amp; bid for every player</option>
             </select>
-            <span class="hint" id="order-hint">Random reshuffles every round so no seat has a built-in edge. Auction: take turns nominating; anyone can win with the highest bid (salary-cap required).</span>
+            <span class="hint" id="order-hint">Auction: take turns nominating; the highest bid wins (uses a salary cap).</span>
           </div>
           <div class="field">
             <label for="posmode-select">Position rules</label>
@@ -124,7 +127,6 @@
               <option value="locked" selected>Locked — assign each pick to a fixed slot</option>
               <option value="flexible">Flexible — lineup re-arranges to fit</option>
             </select>
-            <span class="hint">Flexible lets you take a second SG if someone can slide (PG↔SG↔SF↔PF↔C).</span>
           </div>
           <div class="field">
             <label for="cpupace-select">CPU pace</label>
@@ -132,7 +134,6 @@
               <option value="fast" selected>⚡ Fast — CPUs pick and bid snappily</option>
               <option value="slow">🐢 Relaxed — more time between CPU bids &amp; picks</option>
             </select>
-            <span class="hint">Relaxed gives you more breathing room to react in auctions.</span>
           </div>
         </div>
 
@@ -141,7 +142,7 @@
           <div class="field">
             <label>Eras to include</label>
             <div id="era-filters" class="era-filters"></div>
-            <span class="hint">Only players who starred in a checked decade are draftable — go all-time, or run a pure-’90s draft.</span>
+            <span class="hint">Only players who starred in a checked decade are draftable.</span>
           </div>
           <div class="field">
             <label for="challenge-select">Challenge mode</label>
@@ -150,7 +151,7 @@
               <option value="nostars">🚫⭐ No Superstars — only players rated 85 or below</option>
               <option value="daily60">🎲 Daily 60 — today's shared 60-player pool (same for everyone)</option>
             </select>
-            <span class="hint">Daily 60 reshuffles at midnight — run it separately from your friends and compare results links.</span>
+            <span class="hint">Daily 60 reshuffles at midnight — everyone gets the same pool.</span>
           </div>
         </div>
 
@@ -159,13 +160,13 @@
           <div class="field">
             <label class="cap-toggle">
               <input type="checkbox" id="coach-toggle" />
-              <span>🧠 <b>Draft a head coach</b> — the top 30 coaches since the ’80s, hireable at any point like a sixth position. Style fit matters.</span>
+              <span>🧠 <b>Draft a head coach</b> — hireable at any time; style fit matters.</span>
             </label>
           </div>
           <div class="field">
             <label class="cap-toggle">
               <input type="checkbox" id="cap-toggle" />
-              <span>💰 <b>Salary-cap mode</b> — stars cost a fortune on a steep curve, so you can't stack a Tier-1A roster.</span>
+              <span>💰 <b>Salary-cap mode</b> — stars cost a fortune on a steep curve.</span>
             </label>
           </div>
           <div class="field">
@@ -174,7 +175,7 @@
               <option value="0" selected>No bench — just the starting five</option>
               <option value="2">+2 bench spots (injury cover; two extra rounds)</option>
             </select>
-            <span class="hint">Bench players back up faded starters in the projection. Not available in auctions.</span>
+            <span class="hint">Bench backs up faded starters. Not in auctions.</span>
           </div>
           <div class="field hidden" id="cap-amount-field">
             <label for="cap-amount">Salary cap</label>
@@ -185,10 +186,10 @@
               <option value="225">$225</option>
               <option value="250">$250</option>
             </select>
-            <span class="hint">Defaults to $250 with a coach, $200 without.</span>
           </div>
         </div>
-      </div>
+        </div>
+      </details>
 
       <button id="start-draft" class="btn primary big start-cta">🏀 Start Draft</button>
     </section>
@@ -214,9 +215,8 @@
         <div id="my-status" class="my-status hidden"></div>
         <!-- Live auction bid controls, pinned so you never scroll to re-bid -->
         <div id="auction-bidbar" class="auction-bidbar hidden"></div>
+        <!-- One contextual note line: nomination prompt OR the last pick -->
         <div id="pick-ticker" class="pick-ticker hidden"></div>
-        <div id="cap-status" class="cap-status hidden"></div>
-        <div id="must-fill-banner" class="must-fill hidden"></div>
         <nav id="draft-tabs" class="draft-tabs" aria-label="Draft sections"></nav>
         <div class="draft-progress"><i id="draft-progress-fill"></i></div>
       </div>
@@ -232,7 +232,7 @@
           <span class="share-turn"></span>
           <span class="share-instr"></span>
         </div>
-        <button id="copy-link" class="btn primary">🔗 Copy link to send</button>
+        <button id="copy-link" class="btn primary">🔗 Copy link</button>
         <div id="react-bar" class="react-bar hidden"></div>
       </div>
 
@@ -286,24 +286,21 @@
     <section id="results-screen" class="screen">
       <div class="card">
         <h2>🏆 15-Year Projection Results</h2>
-        <p class="muted">
-          Rosters simulated across 15 seasons. Score blends average regular-season
-          record, playoff depth, expected championships and peak ceiling.
-        </p>
+        <p class="muted">Every roster simulated across 15 seasons.</p>
         <div id="results-podium" class="podium"></div>
         <div id="playoff-bracket" class="playoff-bracket"></div>
         <div id="draft-grades" class="draft-grades"></div>
         <div id="daily-lb" class="daily-lb hidden"></div>
         <div class="res-detail-head">
           <span class="res-subhead" style="margin:0">Team analysis</span>
-          <span class="muted" style="font-size:12px">Tap a team to see just their breakdown</span>
+          <span class="muted" style="font-size:12px">Tap a team</span>
         </div>
         <div id="results-teamtabs" class="results-teamtabs"></div>
         <div id="results-detail" class="results-detail"></div>
         <div class="results-actions">
-          <button id="copy-recap" class="btn big">📣 Copy recap for the group chat</button>
-          <button id="challenge-legends" class="btn big">⚔️ Legends &amp; head-to-head</button>
-          <button id="share-results" class="btn primary big">📋 Copy results link to share</button>
+          <button id="copy-recap" class="btn big">📣 Copy recap</button>
+          <button id="challenge-legends" class="btn big">⚔️ Head-to-head</button>
+          <button id="share-results" class="btn primary big">🔗 Share results</button>
           <button id="play-again" class="btn big">New Draft</button>
         </div>
       </div>
@@ -376,16 +373,16 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=33"></script>
-  <script src="js/firebase-sync.js?v=33"></script>
+  <script src="js/firebase-config.js?v=34"></script>
+  <script src="js/firebase-sync.js?v=34"></script>
 
-  <script src="js/sfx.js?v=33"></script>
-  <script src="js/players.js?v=33"></script>
-  <script src="js/coaches.js?v=33"></script>
-  <script src="js/scoring.js?v=33"></script>
-  <script src="js/postseason.js?v=33"></script>
-  <script src="js/draft.js?v=33"></script>
-  <script src="js/app.js?v=33"></script>
+  <script src="js/sfx.js?v=34"></script>
+  <script src="js/players.js?v=34"></script>
+  <script src="js/coaches.js?v=34"></script>
+  <script src="js/scoring.js?v=34"></script>
+  <script src="js/postseason.js?v=34"></script>
+  <script src="js/draft.js?v=34"></script>
+  <script src="js/app.js?v=34"></script>
   <script>
     // Installable app + offline play (https only; no-op locally/in tests).
     if ("serviceWorker" in navigator && location.protocol === "https:") {
