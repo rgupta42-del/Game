@@ -358,8 +358,11 @@
         ui.roomReady = true;
         history.replaceState(null, "", "#room=" + ui.roomId);
         // Room link FIRST — share it with your friends before anything else
-        // (no clock is running; the draft waits). Seat choice comes after.
-        showShareGate(location.href, () => showSeatModal(names, {}));
+        // (no clock is running; the draft waits). Seat choice comes after —
+        // and only if a seat wasn't already claimed some other way.
+        showShareGate(location.href, () => {
+          if (ui.mySeat == null) showSeatModal(names, {});
+        });
         FBSync.watch(ui.roomId, onRoomUpdate);
       })
       .catch((e) => {
@@ -420,8 +423,10 @@
       buildDraftStaticUI();
       ui.staticBuilt = true;
     }
-    // First-time human joiner picks which (non-CPU) seat they are.
-    if (ui.mySeat == null && names.length) {
+    // First-time human joiner picks which (non-CPU) seat they are — but never
+    // while the share gate is still up (the host seats themselves via its
+    // Continue button; prompting from the echo too caused a double seat modal).
+    if (ui.mySeat == null && names.length && $("#sharegate-modal").classList.contains("hidden")) {
       showSeatModal(names, data.seats || {});
     }
     if (game.isComplete) {
