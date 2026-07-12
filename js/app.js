@@ -1250,15 +1250,90 @@
     updateAuctionClock();
   }
 
+  // ---- CPU auction brain ---------------------------------------------------
+  // Three principles (replacing the old "everyone star-chases" valuation that
+  // paid up to ~145% of value until broke):
+  //   1. BUDGET PLAN — each CPU spreads its remaining bank across its remaining
+  //      slots on a persona curve, so two big buys can't drain the depth money.
+  //   2. VALUE DISCIPLINE — pay a small premium over fair value at most; no $69
+  //      for a $47 player in round one.
+  //   3. USE IT OR LOSE IT — when the bank exceeds what the remaining market
+  //      even costs, surplus money chases the best players left instead of
+  //      stranding (so late bargains get contested, not gifted).
+  const AUCTION_PLANS = {
+    stars:    [0.48, 0.22, 0.13, 0.10, 0.07, 0.05], // top-heavy: two studs + depth
+    standard: [0.40, 0.24, 0.15, 0.12, 0.09, 0.06],
+    balanced: [0.30, 0.24, 0.19, 0.15, 0.12, 0.08], // spread it around
+  };
+  function cpuPlanFor(m) {
+    const style = (cpuProfiles[m.id] || {}).style || "best";
+    if (style === "peak" || style === "upside") return AUCTION_PLANS.stars;
+    if (["defense", "spacing", "playmaking", "twoway"].includes(style)) return AUCTION_PLANS.balanced;
+    return AUCTION_PLANS.standard;
+  }
+  /** Top-k values still on the board that this manager could actually use. */
+  function cpuMarketTopK(m, k) {
+    const open = new Set(game.unfilledStarterSlots(m));
+    const vals = [];
+    for (const p of PLAYER_POOL) {
+      if (!game.isAvailable(p.id) || !poolAllowed(p)) continue;
+      if (!p.eligible.some((s) => open.has(s))) continue;
+      vals.push(proposedValue(p));
+    }
+    if (game.needsCoach(m) && typeof COACH_POOL !== "undefined") {
+      COACH_POOL.forEach((c) => { if (game.isAvailable(c.id)) vals.push(proposedValue(c)); });
+    }
+    vals.sort((a, b) => b - a);
+    return vals.slice(0, Math.max(1, k));
+  }
+
   /** What a CPU manager privately thinks this player is worth (per auction). */
   function cpuValuation(m, p) {
     const base = proposedValue(p);
     const fit = Math.min(1, Math.max(0, (bestFit(m, p) - 76) / 26));
-    const scarcity = game.unfilledRequiredSlots(m).length <= 2 ? 1.12 : 1.0;
-    let v = base * (0.82 + 0.3 * fit) * scarcity;
-    v *= 0.94 + 0.14 * Math.min(1, capLeft(m) / capAmount()); // rich teams stretch
-    v *= 0.92 + Math.random() * 0.18; // personality/noise
+    const slots = Math.max(1, game.unfilledRequiredSlots(m).length);
+    const bank = capLeft(m);
+
+    // 1) Budget plan: the biggest remaining share is the ceiling for this lot.
+    const plan = cpuPlanFor(m).slice(0, slots);
+    const topShare = plan[0] / plan.reduce((a, b) => a + b, 0);
+    const planCeil = bank * topShare * (1 + 0.12 * fit);
+
+    // 2) Value discipline: a fit/scarcity premium of a few percent, no more.
+    const premium = 1 + 0.06 * fit + (slots <= 2 ? 0.05 : 0) + (Math.random() * 0.08 - 0.03);
+    // Bargain floor: pay up to ~95% of value when the wallet truly allows —
+    // but "allows" respects a soft reserve for the rest of the roster, so a
+    // third star can't wipe out the depth budget the way $1-reserves did.
+    const softReserve = bank * (1 - topShare) * 0.7;
+    const spendCeil = Math.max(1, bank - softReserve);
+    let v = Math.min(base * premium, Math.max(planCeil, Math.min(base * 0.95, spendCeil)));
+
+    // 3) Use it or lose it: leftover cap at the end is worth nothing. When the
+    // bank covers the whole remaining market, surplus chases the best left.
+    const market = cpuMarketTopK(m, slots);
+    const sumTopK = market.reduce((a, b) => a + b, 0);
+    if (bank > sumTopK && base >= (market[0] || 0) * 0.8) {
+      const surplus = bank - sumTopK;
+      v = Math.max(v, Math.min(base + surplus * 0.6, maxBid(m) * 0.95, base * 1.8));
+    }
+
+    v *= 0.97 + Math.random() * 0.06; // light personality noise
     return Math.max(1, Math.min(Math.round(v), maxBid(m)));
+  }
+
+  /** CPU nomination strategy: usually open bidding on their own best target,
+   *  but sometimes float a pricey player they DON'T need to drain rivals. */
+  function cpuNomination(m) {
+    if (Math.random() < 0.35) {
+      const open = new Set(game.unfilledStarterSlots(m));
+      const drain = PLAYER_POOL
+        .filter((p) =>
+          game.isAvailable(p.id) && poolAllowed(p) &&
+          !p.eligible.some((s) => open.has(s)) && eligibleBidders(p).length > 0)
+        .sort((a, b) => proposedValue(b) - proposedValue(a))[0];
+      if (drain && proposedValue(drain) >= capAmount() * 0.12) return { player: drain, slot: null };
+    }
+    return cpuChoose(m);
   }
 
   function openAuction(player) {
@@ -1658,7 +1733,7 @@
         if (game.pickLog.length !== atPick) return;
         const cur = game.currentManager();
         if (!cur || !cur.isCpu) return;
-        const choice = cpuChoose(cur);
+        const choice = cpuNomination(cur);
         if (choice) openAuction(choice.player);
       }, ui.cpuPace === "slow" ? 1300 + Math.random() * 1000 : 700 + Math.random() * 800);
       return;
@@ -1701,7 +1776,7 @@
         if (game.pickLog.length !== atPick) return;
         const cur = game.currentManager();
         if (!cur || !cur.isCpu) return;
-        const choice = cpuChoose(cur);
+        const choice = cpuNomination(cur);
         if (choice) openAuction(choice.player);
       }, 1500 + Math.random() * 1500);
       return;
