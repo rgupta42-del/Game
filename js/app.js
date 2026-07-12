@@ -71,7 +71,6 @@
     activeTab: "players", // draft-room tab: "players" | "board" | "teams"
     lastPickSeen: -1, // pickLog length at last render (drives snap-back-to-players)
     allowedEras: ["80s", "90s", "00s", "10s", "20s"],
-    adversities: { inj: false, min: false, locker: false }, // 15-yr sim hazards
   };
   const eraAllowed = (p) => (p.eras || []).some((d) => ui.allowedEras.includes(d));
 
@@ -611,11 +610,6 @@
     }
     ui.allowedEras = Array.from($("#era-filters").querySelectorAll("input:checked")).map((c) => c.value);
     if (ui.allowedEras.length === 0) return alert("Select at least one era.");
-    ui.adversities = {
-      inj: $("#adv-injury").checked,
-      min: $("#adv-minutes").checked,
-      locker: $("#adv-locker").checked,
-    };
     ui.challenge = $("#challenge-select").value || "none";
     ui.chalSeed = ui.challenge === "daily60" ? new Date().toISOString().slice(0, 10) : null;
     _dailySet = null; // recompute for this game's seed
@@ -671,7 +665,6 @@
       bench: ui.benchSize,
       chal: ui.challenge,
       chalSeed: ui.chalSeed,
-      adv: [ui.adversities.inj ? 1 : 0, ui.adversities.min ? 1 : 0, ui.adversities.locker ? 1 : 0],
     };
     // Random order isn't reproducible from the mode alone — carry the actual
     // pick order so every device/replay sees the same sequence.
@@ -692,7 +685,6 @@
     if (cfg.bench != null) ui.benchSize = cfg.bench;
     if (cfg.chal != null) { ui.challenge = cfg.chal; _dailySet = null; }
     if (cfg.chalSeed != null) { ui.chalSeed = cfg.chalSeed; _dailySet = null; }
-    if (Array.isArray(cfg.adv)) ui.adversities = { inj: !!cfg.adv[0], min: !!cfg.adv[1], locker: !!cfg.adv[2] };
     if (Array.isArray(cfg.seatOrder)) ui.draftOrder = cfg.seatOrder;
   }
 
@@ -2530,9 +2522,10 @@
   //  RESULTS SCREEN
   // ========================================================================
   function showResults() {
-    // Adversities (if enabled) shape every projection, seeded by this draft so
-    // shared links replay identically.
-    SCORING.setAdversities(Object.assign({ seed: draftSeedString() }, ui.adversities));
+    // Adversities (injuries, minutes limits, locker-room friction) are part of
+    // the standard analysis, seeded by this draft so shared links replay
+    // identically.
+    SCORING.setAdversities({ inj: true, min: true, locker: true, seed: draftSeedString() });
     const results = game.managers.map((m) => ({
       manager: m,
       eval: evaluateRoster({ starters: m.starters, bench: m.bench, coach: m.coach }),
@@ -2546,7 +2539,6 @@
 
     initSeasonTheater(results);
     renderPodium(results);
-    renderBracket(results, false);
     renderDraftGrades();
     renderResultsDetail(results);
     initLegendsUI(results);
@@ -2594,46 +2586,6 @@
       { starters: r.manager.starters, bench: [], coach: r.manager.coach },
       r.eval
     );
-
-  /** Simulated playoff bracket among the drafted teams (seeded by record). */
-  function renderBracket(results, reroll) {
-    const wrap = $("#playoff-bracket");
-    if (results.length < 2) { wrap.innerHTML = ""; return; }
-    const profiles = results.slice().sort((a, b) => b.eval.avgWins - a.eval.avgWins).map(profileOf);
-    const seed = reroll ? "reroll·" + Math.random() : draftSeedString();
-    const br = POSTSEASON.simBracket(profiles, seed);
-    const R = br.rounds.length;
-    const roundName = (i) => {
-      const left = R - i;
-      return left === 1 ? "🏆 Finals" : left === 2 ? "Semifinals" : "First round";
-    };
-    const roundsHtml = br.rounds
-      .map((series, i) => {
-        const cards = series
-          .map((s) => {
-            if (s.bye) return `<div class="bk-series bye"><b>${s.winner}</b> — first-round bye</div>`;
-            const log = s.games
-              .map((g) => `<div class="bk-game">G${g.g}: <b>${g.winner}</b>${g.close ? " (nail-biter)" : ""} — ${g.star} ${g.pts} pts</div>`)
-              .join("");
-            return `<div class="bk-series${i === R - 1 ? " finals" : ""}">
-              <div class="bk-line">${s.teamA} vs ${s.teamB}</div>
-              <div class="bk-win">→ <b>${s.winner}</b> ${s.score}</div>
-              <details class="bk-log"><summary>game log</summary>${log}</details>
-            </div>`;
-          })
-          .join("");
-        return `<div class="bk-round"><div class="bk-round-name">${roundName(i)}</div>${cards}</div>`;
-      })
-      .join("");
-    ui._bracket = { champ: br.champion.name, mvp: br.mvp }; // for the share recap
-    wrap.innerHTML =
-      `<div class="res-subhead">Simulated postseason — seeded by projected record (upsets happen!)</div>` +
-      `<div class="bk-rounds">${roundsHtml}</div>` +
-      `<div class="bk-champ">🏆 <b>${br.champion.name}</b> wins the simulated title · Finals MVP: <b>${br.mvp}</b></div>`;
-    const resim = el("button", "btn mini", "🎲 Re-simulate the bracket");
-    resim.onclick = () => renderBracket(results, true);
-    wrap.appendChild(resim);
-  }
 
   /** Grade every pick vs value/draft position (price-aware in auctions). */
   let _gradeById = null;
@@ -2831,7 +2783,6 @@
       ];
       if (meIdx > 0) lines.push(`😤 I finished ${ordinal(meIdx + 1)} of ${results.length}`);
       if (ui._steal) lines.push(`💎 Steal: ${ui._steal.name} at pick #${ui._steal.pick}`);
-      if (ui._bracket) lines.push(`⚔️ Sim playoffs: ${ui._bracket.champ} win it · MVP ${ui._bracket.mvp}`);
       lines.push(location.origin + location.pathname + "#g=" + encodeGameState());
       const text = lines.join("\n");
       const btn = $("#copy-recap");
