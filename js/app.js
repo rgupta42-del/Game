@@ -71,6 +71,7 @@
     activeTab: "players", // draft-room tab: "players" | "board" | "teams"
     lastPickSeen: -1, // pickLog length at last render (drives snap-back-to-players)
     allowedEras: ["80s", "90s", "00s", "10s", "20s"],
+    adversities: { inj: false, min: false, locker: false }, // 15-yr sim hazards
   };
   const eraAllowed = (p) => (p.eras || []).some((d) => ui.allowedEras.includes(d));
 
@@ -572,6 +573,11 @@
     }
     ui.allowedEras = Array.from($("#era-filters").querySelectorAll("input:checked")).map((c) => c.value);
     if (ui.allowedEras.length === 0) return alert("Select at least one era.");
+    ui.adversities = {
+      inj: $("#adv-injury").checked,
+      min: $("#adv-minutes").checked,
+      locker: $("#adv-locker").checked,
+    };
     ui.challenge = $("#challenge-select").value || "none";
     ui.chalSeed = ui.challenge === "daily60" ? new Date().toISOString().slice(0, 10) : null;
     _dailySet = null; // recompute for this game's seed
@@ -627,6 +633,7 @@
       bench: ui.benchSize,
       chal: ui.challenge,
       chalSeed: ui.chalSeed,
+      adv: [ui.adversities.inj ? 1 : 0, ui.adversities.min ? 1 : 0, ui.adversities.locker ? 1 : 0],
     };
     // Random order isn't reproducible from the mode alone — carry the actual
     // pick order so every device/replay sees the same sequence.
@@ -647,6 +654,7 @@
     if (cfg.bench != null) ui.benchSize = cfg.bench;
     if (cfg.chal != null) { ui.challenge = cfg.chal; _dailySet = null; }
     if (cfg.chalSeed != null) { ui.chalSeed = cfg.chalSeed; _dailySet = null; }
+    if (Array.isArray(cfg.adv)) ui.adversities = { inj: !!cfg.adv[0], min: !!cfg.adv[1], locker: !!cfg.adv[2] };
     if (Array.isArray(cfg.seatOrder)) ui.draftOrder = cfg.seatOrder;
   }
 
@@ -2399,10 +2407,16 @@
   //  RESULTS SCREEN
   // ========================================================================
   function showResults() {
+    // Adversities (if enabled) shape every projection, seeded by this draft so
+    // shared links replay identically.
+    SCORING.setAdversities(Object.assign({ seed: draftSeedString() }, ui.adversities));
     const results = game.managers.map((m) => ({
       manager: m,
       eval: evaluateRoster({ starters: m.starters, bench: m.bench, coach: m.coach }),
     }));
+    // Shared 15-year window: teams trade head-to-head wins, and exactly one
+    // champion is crowned per year — titles are zero-sum across this room.
+    POSTSEASON.leagueSim(results.map((r) => r.eval), draftSeedString());
     results.sort((a, b) => b.eval.composite - a.eval.composite);
     ui.resultTeam = 0; // default to the champion's analysis
     clearSavedDraft(); // the draft is finished — nothing to resume
@@ -2894,20 +2908,28 @@
         ? fold("📜 The 15-year run", `<p class="res-narrative">${narrative}</p>`)
         : "";
 
-      // Win timeline, color-coded by how deep each season went.
+      // Win timeline. GOLD = a season this team actually won the title (from
+      // the shared-league sim), so the gold bars always match the championships
+      // number on the card.
       const maxWins = 73;
       const bars = ev.seasons
         .map((s, idx) => {
           const h = Math.round((s.wins / maxWins) * 100);
-          const cls = s.playoffIndex >= 84 ? " gold" : s.playoffIndex >= 70 ? " hot" : s.playoffIndex < 20 ? " cold" : "";
-          return `<div class="bar${cls}" style="height:${h}%" data-tip="Yr ${idx + 1}: ${Math.round(s.wins)}-${Math.round(82 - s.wins)} · ${playoffLabel(s.playoffIndex)}"></div>`;
+          const cls = s.title ? " gold" : s.playoffIndex >= 70 ? " hot" : s.playoffIndex < 20 ? " cold" : "";
+          const tip = `Yr ${idx + 1}: ${Math.round(s.wins)}-${Math.round(82 - s.wins)} · ${s.title ? "🏆 WON THE TITLE" : playoffLabel(s.playoffIndex)}`;
+          return `<div class="bar${cls}" style="height:${h}%" data-tip="${tip}"></div>`;
         })
         .join("");
       const tlLegend =
-        `<div class="tl-legend"><span><i class="tl-k gold"></i>Title favorite</span>` +
+        `<div class="tl-legend"><span><i class="tl-k gold"></i>Won the title</span>` +
         `<span><i class="tl-k hot"></i>Finals-level</span>` +
         `<span><i class="tl-k"></i>Playoffs</span>` +
         `<span><i class="tl-k cold"></i>Lottery</span></div>`;
+
+      // Adversity log (only when adversities are enabled for this draft).
+      const advHtml = ev.advLog && ev.advLog.length
+        ? fold("🌪️ Adversity log", `<ul class="res-pairings">${ev.advLog.map((e) => `<li class="${e.kind}">${e.text}</li>`).join("")}</ul>`)
+        : "";
 
       team.innerHTML = `
         <h4>${i === 0 ? "🏆 " : `#${i + 1} `}${m.isCpu ? "🤖 " : ""}${m.name}</h4>
@@ -2932,6 +2954,7 @@
             </div>
           </div>
         </div>
+        ${advHtml}
         ${synHtml}
         ${effHtml}
         ${narrativeHtml}

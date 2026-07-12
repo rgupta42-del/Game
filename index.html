@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="icon" type="image/png" href="icon-192.png" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=35" />
+  <link rel="stylesheet" href="styles.css?v=36" />
 </head>
 <body>
   <header class="topbar">
@@ -88,7 +88,7 @@
       </div>
 
       <details id="advanced-setup" class="advanced-setup">
-        <summary>⚙️ Advanced options <span class="adv-sub">clock · draft type · eras · challenges · coach · cap · bench</span></summary>
+        <summary>⚙️ Advanced options <span class="adv-sub">clock · draft type · eras · challenges · coach · cap · adversities</span></summary>
         <div class="setup-grid">
         <div class="setup-card">
           <h3 class="sc-title">⏱️ Draft rules</h3>
@@ -160,6 +160,21 @@
             <label class="cap-toggle">
               <input type="checkbox" id="cap-toggle" />
               <span>💰 <b>Salary-cap mode</b> — stars cost a fortune on a steep curve.</span>
+            </label>
+          </div>
+          <div class="field">
+            <label>🌪️ Adversities (15-year sim)</label>
+            <label class="cap-toggle">
+              <input type="checkbox" id="adv-injury" />
+              <span>🩼 <b>Injuries</b> — stars can miss big chunks of seasons; injury risk matters more.</span>
+            </label>
+            <label class="cap-toggle" style="margin-top:8px">
+              <input type="checkbox" id="adv-minutes" />
+              <span>⏱️ <b>Minutes limits</b> — heavy-usage lineups lose steam over the run.</span>
+            </label>
+            <label class="cap-toggle" style="margin-top:8px">
+              <input type="checkbox" id="adv-locker" />
+              <span>🧨 <b>Locker-room issues</b> — publicly-reported clashes &amp; stacked egos can boil over.</span>
             </label>
           </div>
           <div class="field">
@@ -368,16 +383,16 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=35"></script>
-  <script src="js/firebase-sync.js?v=35"></script>
+  <script src="js/firebase-config.js?v=36"></script>
+  <script src="js/firebase-sync.js?v=36"></script>
 
-  <script src="js/sfx.js?v=35"></script>
-  <script src="js/players.js?v=35"></script>
-  <script src="js/coaches.js?v=35"></script>
-  <script src="js/scoring.js?v=35"></script>
-  <script src="js/postseason.js?v=35"></script>
-  <script src="js/draft.js?v=35"></script>
-  <script src="js/app.js?v=35"></script>
+  <script src="js/sfx.js?v=36"></script>
+  <script src="js/players.js?v=36"></script>
+  <script src="js/coaches.js?v=36"></script>
+  <script src="js/scoring.js?v=36"></script>
+  <script src="js/postseason.js?v=36"></script>
+  <script src="js/draft.js?v=36"></script>
+  <script src="js/app.js?v=36"></script>
   <script>
     // Installable app + offline play (https only; no-op locally/in tests).
     if ("serviceWorker" in navigator && location.protocol === "https:") {

@@ -571,9 +571,10 @@ function careerNarrative(roster, ev) {
     : `needed a few seasons to gel, opening around ${rec(early)}`;
   p += `, then peaked in year ${peakYr + 1} at ${rec(peakW)}`;
   if (ev.championships >= 1) {
-    p += ` and converted that ceiling into about ${ev.championships} championship${ev.championships === 1 ? "" : "s"} over the run`;
+    const yrs = ev.titleYears && ev.titleYears.length ? ` (year${ev.titleYears.length === 1 ? "" : "s"} ${ev.titleYears.join(", ")})` : "";
+    p += ` and beat out the rest of this draft's field for ${ev.championships} ring${ev.championships === 1 ? "" : "s"}${yrs}`;
   } else if (ev.avgPlayoffIndex >= 55) {
-    p += `, going on deep playoff runs but never quite breaking through for a title`;
+    p += `, going on deep playoff runs but never getting past this room's rivals for a title`;
   } else {
     p += `, but the postseason results never matched the regular-season form`;
   }
@@ -975,9 +976,100 @@ function projectSeason(ctx, t) {
   return { wins, playoffIndex, titleProb, avgStarterValue, chemistry: ctx.chemistry };
 }
 
+// --------------------------------------------------------------------------
+//  Adversities (optional): injuries, minutes limits, locker-room issues.
+//  Seeded per draft + roster so shared results links replay identically.
+// --------------------------------------------------------------------------
+let ADVERSITY = null; // { inj, min, locker, seed }
+function setAdversities(a) {
+  ADVERSITY = a && (a.inj || a.min || a.locker) ? a : null;
+}
+// Tiny deterministic PRNG (FNV hash + mulberry32) — self-contained on purpose.
+const advHash = (s) => {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+};
+const advRng = (seed) => {
+  let a = seed | 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+// Locker-room volatility, based on widely-reported public history (suspensions,
+// forced exits, documented team friction). Absent = 0.
+const VOLATILITY = {
+  rodman: 28, sprewell: 28, arenas: 26, artest: 26,
+  dwight: 18, kyrie: 18, harden: 18, boogie: 18, draymond: 18,
+  marbury: 16, morant: 16, butler: 12, iverson: 10,
+};
+
+/** Per-season win penalties + a human-readable event log for the enabled
+ *  adversities. Null when adversities are off (the common case). */
+function adversityPlan(ctx) {
+  const A = ADVERSITY;
+  if (!A || ctx.filled === 0) return null;
+  const ids = ctx.starters.map((p) => p.id).sort().join("|");
+  const rnd = advRng(advHash("adv·" + (A.seed || "") + "·" + ids));
+  const pens = new Array(PROJECTION_YEARS).fill(0);
+  const events = [];
+
+  if (A.inj) {
+    ctx.starters.forEach((p) => {
+      const perSeason = (p.injuryRisk / 100) * 0.26; // risk 60 → ~2.3 hit seasons
+      const stakes = 0.5 + clamp((careerRating(p) - 68) / 28, 0, 1) * 0.8; // stars hurt more
+      for (let t = 0; t < PROJECTION_YEARS; t++) {
+        if (rnd() < perSeason) {
+          const sev = 0.3 + rnd() * 0.6; // fraction of the season lost
+          pens[t] += sev * 8.5 * stakes;
+          if (sev > 0.55) events.push({ y: t + 1, kind: "bad", text: `🩼 Yr ${t + 1}: ${p.name} missed most of the season injured` });
+          else if (sev > 0.4) events.push({ y: t + 1, kind: "bad", text: `🩼 Yr ${t + 1}: ${p.name} missed extended time injured` });
+        }
+      }
+    });
+  }
+
+  if (A.min) {
+    const heavy = ctx.starters.filter((p) => p.career.ballDominance >= 82);
+    const over = ctx.starters.reduce((s, p) => s + Math.max(0, p.career.ballDominance - 80), 0);
+    const per = clamp(0.8 + over * 0.045, 0.8, 4);
+    for (let t = 0; t < PROJECTION_YEARS; t++) pens[t] += per * (t >= 9 ? 1.35 : 1); // load management bites late
+    events.push(
+      heavy.length >= 2
+        ? { y: 1, kind: "bad", text: `⏱️ Minutes limits: ${heavy.map((p) => p.name).join(" & ")} can't all play 40 a night — the heavy-usage core loses steam, especially late in the run` }
+        : { y: 1, kind: "good", text: "⏱️ Minutes limits: balanced usage — the rotation absorbs capped minutes without much cost" }
+    );
+  }
+
+  if (A.locker) {
+    const vol = ctx.starters.reduce((s, p) => s + (VOLATILITY[p.id] || 0), 0);
+    const alphas = ctx.starters.filter((p) => p.career.ballDominance >= 86);
+    const friction = vol + Math.max(0, alphas.length - 1) * 14; // big egos collide
+    if (friction >= 14) {
+      const start = 3 + Math.floor(rnd() * 8);
+      const len = 2 + (rnd() < 0.5 ? 0 : 1);
+      const end = Math.min(start + len, PROJECTION_YEARS);
+      const hit = clamp(friction * 0.16, 2, 8.5);
+      for (let t = start; t < end; t++) pens[t] += hit;
+      const named = ctx.starters.filter((p) => (VOLATILITY[p.id] || 0) >= 10).map((p) => p.name);
+      const who = named.length ? named.join(", ") : alphas.map((p) => p.name).join(" vs ");
+      events.push({ y: start + 1, kind: "bad", text: `🧨 Yr ${start + 1}–${end}: locker-room tension boiled over (${who}) — the on-court product dipped` });
+    } else {
+      events.push({ y: 1, kind: "good", text: "🧨 Locker room stayed professional — no drama surfaced over the run" });
+    }
+  }
+
+  events.sort((a, b) => a.y - b.y);
+  return { pens, events };
+}
+
 /** Full 15-season evaluation of a roster. */
 function evaluateRoster(roster) {
   const ctx = rosterContext(roster); // hoist all season-invariant work out of the loop
+  const adv = adversityPlan(ctx);
   const seasons = [];
   let winsSum = 0;
   let playoffSum = 0;
@@ -986,6 +1078,13 @@ function evaluateRoster(roster) {
 
   for (let t = 0; t < PROJECTION_YEARS; t++) {
     const s = projectSeason(ctx, t);
+    if (adv && adv.pens[t] > 0) {
+      // Adversity hits the record, the playoff ceiling, and the title odds.
+      const pen = Math.min(adv.pens[t], 18);
+      s.wins = clamp(s.wins - pen, 10, 74);
+      s.playoffIndex = clamp(s.playoffIndex * (1 - pen / 26), 0, 100);
+      s.titleProb = Math.max(0, s.titleProb * (1 - pen / 18));
+    }
     seasons.push(s);
     winsSum += s.wins;
     playoffSum += s.playoffIndex;
@@ -1030,6 +1129,8 @@ function evaluateRoster(roster) {
     championships, // rounded total titles over 15 years
     composite,
     seasons,
+    advLog: adv ? adv.events : [], // adversity event log (empty when off)
+    _mults: cohesionMult * fitMult * effMult, // so the league sim can rebuild composite
   };
 }
 
@@ -1273,6 +1374,7 @@ const SCORING = {
   effectiveSeasonValue,
   careerArc,
   evaluateRoster,
+  setAdversities,
   playoffLabel,
   pickFitGrade,
   analyzeRoster,

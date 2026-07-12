@@ -162,7 +162,74 @@
     return { starters, bench: [] };
   }
 
-  const POSTSEASON = { mulberry32, hashStr, teamProfile, simSeries, simBracket, seriesWinPct, LEGEND_SQUADS, legendRoster };
+  /**
+   * Shared-league simulation: every drafted team lives in the SAME 15-year
+   * window, so they trade head-to-head wins and only one champion is crowned
+   * per year — titles are zero-sum across the room.
+   *
+   * Mutates each eval in place:
+   *  • Each season, each pair plays ~4 head-to-head games; expected wins move
+   *    from the weaker to the stronger roster (zero-sum, elo-style).
+   *  • One title per year: room teams claim it in proportion to their title
+   *    odds (scaled down when contenders collide — superteams cap each other);
+   *    otherwise "the Field" (the rest of the league) wins that year.
+   *  • championships / titleYears / records / composite are recomputed so the
+   *    gold bars on the win chart line up EXACTLY with the titles shown.
+   */
+  function leagueSim(evals, seedStr) {
+    if (!evals || evals.length < 2) return;
+    const N = evals.length;
+    const rnd = mulberry32(hashStr("league·" + seedStr));
+    const years = evals[0].seasons.length;
+
+    for (let y = 0; y < years; y++) {
+      const ss = evals.map((e) => e.seasons[y]);
+      // 1) Head-to-head schedule: zero-sum win swings by strength gap.
+      const base = ss.map((s) => s.wins);
+      ss.forEach((s, i) => {
+        let d = 0;
+        for (let j = 0; j < N; j++) {
+          if (j === i) continue;
+          const p = 1 / (1 + Math.pow(10, (base[j] - base[i]) / 13));
+          d += (p - 0.5) * 4;
+        }
+        s.wins = Math.max(10, Math.min(73, s.wins + d));
+      });
+      // 2) One ring per year.
+      const probs = ss.map((s) => s.titleProb);
+      const tot = probs.reduce((a, b) => a + b, 0);
+      const scale = tot > 0.9 ? 0.9 / tot : 1; // contenders knock each other out
+      let u = rnd();
+      for (let i = 0; i < N; i++) {
+        u -= probs[i] * scale;
+        if (u <= 0) { ss[i].title = true; break; }
+      }
+      // u > 0 → the Field won this year; nobody in the room gets the ring.
+    }
+
+    evals.forEach((e) => {
+      let winsSum = 0, peak = 0, titles = 0;
+      const titleYears = [];
+      e.seasons.forEach((s, y) => {
+        winsSum += s.wins;
+        peak = Math.max(peak, s.wins);
+        if (s.title) { titles++; titleYears.push(y + 1); }
+      });
+      e.avgWins = winsSum / years;
+      e.avgRecord = `${e.avgWins.toFixed(1)}-${(82 - e.avgWins).toFixed(1)}`;
+      e.peakWins = Math.round(peak);
+      e.bestRecord = `${e.peakWins}-${82 - e.peakWins}`;
+      e.championships = titles;
+      e.titleYears = titleYears;
+      // Same blend as evaluateRoster, with rings actually WON leading the title
+      // term (expected titles temper pure luck).
+      e.composite =
+        (e.avgWins * 0.55 + e.avgPlayoffIndex * 0.5 + (titles * 3.2 + e.titlesExpected * 1.3) + peak * 0.25) *
+        (e._mults || 1);
+    });
+  }
+
+  const POSTSEASON = { mulberry32, hashStr, teamProfile, simSeries, simBracket, seriesWinPct, LEGEND_SQUADS, legendRoster, leagueSim };
   if (typeof module !== "undefined" && module.exports) module.exports = POSTSEASON;
   if (typeof window !== "undefined") window.POSTSEASON = POSTSEASON;
 })();
