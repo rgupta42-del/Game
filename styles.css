@@ -652,7 +652,8 @@ select:focus, input:focus { border-color: var(--accent-2); }
 @media (max-width: 720px) { .res-cols { grid-template-columns: 1fr; } }
 .res-rostercard, .res-swcard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
 .res-rostercard .res-subhead, .res-swcard .res-subhead { margin-top: 0; }
-.res-slot { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.res-slot { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto auto auto; gap: 8px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.res-price { font-size: 12px; font-weight: 800; color: var(--good); white-space: nowrap; }
 .res-slot:last-child { border-bottom: none; }
 .res-slot.empty { opacity: 0.55; }
 .res-pos { font-weight: 800; color: var(--accent-2); }

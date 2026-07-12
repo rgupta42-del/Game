@@ -182,8 +182,15 @@
       ui.mode = e.target.value;
       $("#mode-hint").textContent =
         ui.mode === "online"
-          ? "Each manager joins on their own device via a shared link."
+          ? "Each manager joins on their own device via a shared link — draft live, or clockless at your own pace over days."
           : "Everyone drafts on this device, taking turns.";
+      const clockHint = $("#clock-hint");
+      if (clockHint) {
+        clockHint.textContent =
+          ui.mode === "online"
+            ? "No clock = slow draft: everyone picks at their own pace and the room waits — even for days."
+            : "At zero, the best available player is auto-picked.";
+      }
       $("#start-draft").textContent = ui.mode === "online" ? "Start Online Draft" : "Start Draft";
       renderManagerNameInputs();
     });
@@ -1058,7 +1065,10 @@
     let save = null;
     try { save = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
     if (!save || (!save.state && !save.roomId)) return;
-    if (Date.now() - (save.t || 0) > 48 * 3600 * 1000) { clearSavedDraft(); return; } // stale
+    // Live rooms persist server-side, so a slow draft can span weeks; local
+    // snapshots only need to survive an accidental tab close.
+    const maxAgeHours = save.live ? 30 * 24 : 48;
+    if (Date.now() - (save.t || 0) > maxAgeHours * 3600 * 1000) { clearSavedDraft(); return; } // stale
     $("#resume-sub").textContent = save.live
       ? "Live room — rejoin where the group left off."
       : `Round ${save.round} · Pick ${save.pick} of ${save.total}`;
@@ -1701,7 +1711,9 @@
       turnEl.innerHTML = mine
         ? `🟢 <b>Your turn</b> — make your pick below${youAre}`
         : `⏳ Waiting for <b>${m.name}</b> to pick${youAre}`;
-      instrEl.textContent = "Live room — picks sync in real time.";
+      instrEl.textContent = ui.clockSeconds > 0 || game.auction
+        ? "Live room — picks sync in real time."
+        : "Slow draft — no clock. Close the tab and come back whenever; your seat and the room are saved, and the draft waits.";
       renderReactBar();
     } else {
       $("#react-bar").classList.add("hidden");
@@ -2902,6 +2914,13 @@
       const m = r.manager;
       const team = el("div", "res-team");
 
+      // Auction drafts: show the hammer price actually paid for every player.
+      const priceTag = (pid) => {
+        if (!game.auction) return "";
+        const e = game.pickLog.find((x) => x.player.id === pid);
+        return e && e.price != null ? `<span class="res-price" title="Hammer price paid">$${e.price}</span>` : "";
+      };
+
       // Clean position-by-position roster (+ coach row when coaches are on).
       let rosterRows = STARTER_SLOTS.map((slot) => {
         const p = m.starters[slot];
@@ -2910,6 +2929,7 @@
         return `<div class="res-slot">
             <span class="res-pos">${slot}</span>
             <span class="res-pname">${tierBadge(p)} ${p.name}</span>
+            ${priceTag(p.id)}
             ${gr ? `<span class="res-grade">${gr}</span>` : ""}
             <span class="res-ptag">${SCORING.usageTier(p)}</span>
             <span class="res-prate">${careerRating(p)}</span>
@@ -2929,6 +2949,7 @@
         rosterRows += m.coach
           ? `<div class="res-slot coach"><span class="res-pos">🧠</span>
                <span class="res-pname">${m.coach.name}</span>
+               ${priceTag(m.coach.id)}
                <span class="res-ptag">${m.coach.style}</span>
                <span class="res-prate">${m.coach.overall}</span></div>`
           : `<div class="res-slot empty"><span class="res-pos">🧠</span><span class="res-pname">— no coach —</span></div>`;
@@ -3015,6 +3036,7 @@
           <div class="res-stat"><b>${playoffLabel(ev.avgPlayoffIndex)}</b>Typical postseason</div>
           <div class="res-stat"><b>${ev.cohesion}</b>Team cohesion</div>
           <div class="res-stat"><b>${Math.round(ev.composite)}</b>Composite score</div>
+          ${ui.capMode ? `<div class="res-stat"><b>$${managerSpent(m)}</b>Spent of $${capAmount()} cap</div>` : ""}
         </div>
         <div class="res-cols">
           <div class="res-rostercard">

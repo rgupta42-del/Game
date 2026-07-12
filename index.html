@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="icon" type="image/png" href="icon-192.png" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=37" />
+  <link rel="stylesheet" href="styles.css?v=38" />
 </head>
 <body>
   <header class="topbar">
@@ -102,7 +102,7 @@
               <option value="90">1:30</option>
               <option value="120">2:00</option>
             </select>
-            <span class="hint">At zero, the best available player is auto-picked.</span>
+            <span class="hint" id="clock-hint">At zero, the best available player is auto-picked.</span>
           </div>
           <div class="field">
             <label for="order-select">Draft type &amp; order</label>
@@ -383,16 +383,16 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=37"></script>
-  <script src="js/firebase-sync.js?v=37"></script>
+  <script src="js/firebase-config.js?v=38"></script>
+  <script src="js/firebase-sync.js?v=38"></script>
 
-  <script src="js/sfx.js?v=37"></script>
-  <script src="js/players.js?v=37"></script>
-  <script src="js/coaches.js?v=37"></script>
-  <script src="js/scoring.js?v=37"></script>
-  <script src="js/postseason.js?v=37"></script>
-  <script src="js/draft.js?v=37"></script>
-  <script src="js/app.js?v=37"></script>
+  <script src="js/sfx.js?v=38"></script>
+  <script src="js/players.js?v=38"></script>
+  <script src="js/coaches.js?v=38"></script>
+  <script src="js/scoring.js?v=38"></script>
+  <script src="js/postseason.js?v=38"></script>
+  <script src="js/draft.js?v=38"></script>
+  <script src="js/app.js?v=38"></script>
   <script>
     // Installable app + offline play (https only; no-op locally/in tests).
     if ("serviceWorker" in navigator && location.protocol === "https:") {
