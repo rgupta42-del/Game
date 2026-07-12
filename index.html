@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="icon" type="image/png" href="icon-192.png" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=34" />
+  <link rel="stylesheet" href="styles.css?v=35" />
 </head>
 <body>
   <header class="topbar">
@@ -38,13 +38,6 @@
           and let the analytics engine play out 15 full seasons of spacing, fit,
           chemistry and clutch to crown the best-built team.
         </p>
-        <div class="hero-chips">
-          <span class="hchip">🕰️ 275+ players · 5 eras</span>
-          <span class="hchip">🧠 Draftable head coaches</span>
-          <span class="hchip">🔨 Snake or auction drafts</span>
-          <span class="hchip">💰 Salary-cap twist</span>
-          <span class="hchip">📱 Live online rooms</span>
-        </div>
         <div class="hero-steps">
           <div class="step"><b>1</b><span>Set up your draft room</span></div>
           <div class="step"><b>2</b><span>Snake-draft your five (+ coach)</span></div>
@@ -67,7 +60,7 @@
       <!-- One-tap Quick Start presets (everything below stays tweakable) -->
       <div class="presets" id="preset-row">
         <button class="preset" data-preset="classic"><b>🏆 Classic Snake</b><span>4 teams · all eras · 1:00 clock</span></button>
-        <button class="preset" data-preset="auction"><b>💰 Auction Night</b><span>coach + $250 cap · relaxed CPUs</span></button>
+        <button class="preset" data-preset="auction"><b>💰 Auction Night</b><span>$200 cap · you + 3 CPUs</span></button>
         <button class="preset" data-preset="daily"><b>🎲 Daily Challenge</b><span>today's shared 60-player pool</span></button>
         <button class="preset" data-preset="quick"><b>⚡ Quick vs CPUs</b><span>you + 3 CPUs · no clock</span></button>
       </div>
@@ -180,6 +173,8 @@
           <div class="field hidden" id="cap-amount-field">
             <label for="cap-amount">Salary cap</label>
             <select id="cap-amount">
+              <option value="100">$100</option>
+              <option value="125">$125</option>
               <option value="150">$150</option>
               <option value="175">$175</option>
               <option value="200" selected>$200</option>
@@ -373,16 +368,16 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=34"></script>
-  <script src="js/firebase-sync.js?v=34"></script>
+  <script src="js/firebase-config.js?v=35"></script>
+  <script src="js/firebase-sync.js?v=35"></script>
 
-  <script src="js/sfx.js?v=34"></script>
-  <script src="js/players.js?v=34"></script>
-  <script src="js/coaches.js?v=34"></script>
-  <script src="js/scoring.js?v=34"></script>
-  <script src="js/postseason.js?v=34"></script>
-  <script src="js/draft.js?v=34"></script>
-  <script src="js/app.js?v=34"></script>
+  <script src="js/sfx.js?v=35"></script>
+  <script src="js/players.js?v=35"></script>
+  <script src="js/coaches.js?v=35"></script>
+  <script src="js/scoring.js?v=35"></script>
+  <script src="js/postseason.js?v=35"></script>
+  <script src="js/draft.js?v=35"></script>
+  <script src="js/app.js?v=35"></script>
   <script>
     // Installable app + offline play (https only; no-op locally/in tests).
     if ("serviceWorker" in navigator && location.protocol === "https:") {

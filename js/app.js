@@ -218,7 +218,7 @@
     // Quick Start presets: fill the whole form in one tap (still tweakable).
     const PRESETS = {
       classic: { mode: "local", n: 4, clock: "60", order: "snake", pos: "locked", pace: "fast", coach: false, cap: false, chal: "none", bench: "0", cpus: [] },
-      auction: { mode: "local", n: 4, clock: "60", order: "auction", pos: "locked", pace: "slow", coach: true, cap: true, capAmt: "250", chal: "none", bench: "0", cpus: [1, 2, 3] },
+      auction: { mode: "local", n: 4, clock: "60", order: "auction", pos: "locked", pace: "fast", coach: false, cap: true, capAmt: "200", chal: "none", bench: "0", cpus: [1, 2, 3] },
       daily:   { mode: "local", n: 4, clock: "60", order: "snake", pos: "locked", pace: "fast", coach: false, cap: false, chal: "daily60", bench: "0", cpus: [1, 2, 3] },
       quick:   { mode: "local", n: 4, clock: "0",  order: "snake", pos: "locked", pace: "fast", coach: false, cap: false, chal: "none", bench: "0", cpus: [1, 2, 3] },
     };
