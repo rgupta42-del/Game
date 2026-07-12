@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="icon" type="image/png" href="icon-192.png" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=38" />
+  <link rel="stylesheet" href="styles.css?v=39" />
 </head>
 <body>
   <header class="topbar">
@@ -297,6 +297,16 @@
       <div class="card">
         <h2>🏆 15-Year Projection Results</h2>
         <p class="muted">Every roster simulated across 15 seasons.</p>
+        <!-- Season theater: replay the 15-year window as an animated reveal -->
+        <button id="play-sim" class="btn primary big hidden">▶ Play the 15 years</button>
+        <div id="season-theater" class="season-theater hidden">
+          <div class="st-head">
+            <span id="st-year" class="st-year">Year 1</span>
+            <button id="st-skip" class="btn mini">Skip to the end ⏭</button>
+          </div>
+          <div id="st-bars" class="st-bars"></div>
+          <div id="st-feed" class="st-feed"></div>
+        </div>
         <div id="results-podium" class="podium"></div>
         <div id="playoff-bracket" class="playoff-bracket"></div>
         <div id="draft-grades" class="draft-grades"></div>
@@ -383,16 +393,16 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=38"></script>
-  <script src="js/firebase-sync.js?v=38"></script>
+  <script src="js/firebase-config.js?v=39"></script>
+  <script src="js/firebase-sync.js?v=39"></script>
 
-  <script src="js/sfx.js?v=38"></script>
-  <script src="js/players.js?v=38"></script>
-  <script src="js/coaches.js?v=38"></script>
-  <script src="js/scoring.js?v=38"></script>
-  <script src="js/postseason.js?v=38"></script>
-  <script src="js/draft.js?v=38"></script>
-  <script src="js/app.js?v=38"></script>
+  <script src="js/sfx.js?v=39"></script>
+  <script src="js/players.js?v=39"></script>
+  <script src="js/coaches.js?v=39"></script>
+  <script src="js/scoring.js?v=39"></script>
+  <script src="js/postseason.js?v=39"></script>
+  <script src="js/draft.js?v=39"></script>
+  <script src="js/app.js?v=39"></script>
   <script>
     // Installable app + offline play (https only; no-op locally/in tests).
     if ("serviceWorker" in navigator && location.protocol === "https:") {

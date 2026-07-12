@@ -127,6 +127,19 @@
     PLAYER_POOL.find((x) => x.id === id) ||
     (typeof COACH_POOL !== "undefined" ? COACH_POOL.find((x) => x.id === id) : null);
 
+  // Per-manager accent color: used on board columns, roster cards, the podium
+  // and the season theater, so every team has a visual identity.
+  const MGR_COLORS = ["#ff6b35", "#4aa3ff", "#3ddc84", "#ffd54a", "#b06bff", "#ff5d7a", "#2dd4bf", "#ff9e2c"];
+  const mgrColor = (id) => MGR_COLORS[(id | 0) % MGR_COLORS.length];
+
+  /** Small headshot as an HTML string (for template-built rows). The initials
+   *  sit behind the img, so a failed photo just shows them — no JS needed. */
+  function miniPhotoHtml(p) {
+    if (!p) return "";
+    const img = p.photo ? `<img src="${p.photo}" alt="" loading="lazy" onerror="this.remove()" />` : "";
+    return `<span class="mini-photo${p.isCoach ? " coach" : ""}"><i>${p.initials || "?"}</i>${img}</span>`;
+  }
+
   const injuryDot = (risk) => {
     if (risk >= 60) return `<span class="injury-dot" title="High injury risk (${risk})">🔴</span>`;
     if (risk >= 38) return `<span class="injury-dot" title="Moderate injury risk (${risk})">🟡</span>`;
@@ -266,6 +279,24 @@
       b._preset = (b.dataset && b.dataset.preset) || ((b.innerHTML.match(/Classic/) && "classic") || (b.innerHTML.match(/Auction/) && "auction") || (b.innerHTML.match(/Daily/) && "daily") || "quick");
       b.addEventListener("click", () => applyPreset(b._preset));
     });
+
+    // Condense the sticky draft header while scrolling DOWN the player list
+    // (the status/ticker rows tuck away); any scroll up brings them back.
+    if (typeof window.addEventListener === "function") {
+      let lastY = 0;
+      window.addEventListener(
+        "scroll",
+        () => {
+          const sticky = $("#draft-sticky");
+          if (!sticky) return;
+          const yNow = window.scrollY || window.pageYOffset || 0;
+          if (yNow > 160 && yNow > lastY + 4) sticky.classList.add("condensed");
+          else if (yNow < lastY - 4 || yNow < 80) sticky.classList.remove("condensed");
+          lastY = yNow;
+        },
+        { passive: true }
+      );
+    }
 
     initResumeCard();
   }
@@ -2337,7 +2368,9 @@
       // In cap mode the column header shows total spent, so you can see where the
       // money went in real time.
       const headTxt = (m.isCpu ? "🤖 " : "") + m.name + (ui.capMode ? ` · $${managerSpent(m)}` : "");
-      col.appendChild(el("div", "db-head", headTxt));
+      const head = el("div", "db-head", headTxt);
+      head.style.borderTop = `3px solid ${mgrColor(m.id)}`;
+      col.appendChild(head);
       for (let rd = 1; rd <= rounds; rd++) {
         const e = byMgrRound[m.id] && byMgrRound[m.id][rd];
         const isCurrent = m.id === curId && rd === curRound;
@@ -2444,10 +2477,11 @@
       const filled = SCORING.starterPlayers({ starters: m.starters, bench: [] }).length;
       const isMe = ui.live && m.id === ui.mySeat;
       const card = el("div", "team-card" + (m.id === onClockId ? " on-clock" : ""));
+      card.style.borderLeft = `3px solid ${mgrColor(m.id)}`;
 
       const head = el("div", "team-card-head");
       head.innerHTML =
-        `<span class="team-name">${m.isCpu ? "🤖 " : ""}${m.name}${isMe ? ' <span class="you-badge">YOU</span>' : ""}</span>` +
+        `<span class="team-name" style="color:${mgrColor(m.id)}">${m.isCpu ? "🤖 " : ""}${m.name}${isMe ? ' <span class="you-badge">YOU</span>' : ""}</span>` +
         `<span class="team-fill">${filled}/5${m.id === onClockId ? " · on the clock" : ""}</span>`;
       card.appendChild(head);
 
@@ -2458,6 +2492,7 @@
       if (ui.coachMode) {
         const crow = el("div", "slot-row coach-slot-row" + (m.coach ? "" : " empty"));
         crow.appendChild(el("div", "slot-key", "🧠"));
+        crow.appendChild(el("div", "mini-cell", m.coach ? miniPhotoHtml(m.coach) : ""));
         if (m.coach) {
           const info = el("div");
           info.innerHTML = `<div class="slot-player">${m.coach.name}</div>
@@ -2477,6 +2512,7 @@
   function slotRow(slotKey, player) {
     const row = el("div", "slot-row" + (player ? "" : " empty"));
     row.appendChild(el("div", "slot-key", slotKey));
+    row.appendChild(el("div", "mini-cell", player ? miniPhotoHtml(player) : ""));
     if (player) {
       const info = el("div");
       info.innerHTML = `<div class="slot-player">${player.name} ${injuryDot(player.injuryRisk)}</div>
@@ -2508,6 +2544,7 @@
     ui.resultTeam = 0; // default to the champion's analysis
     clearSavedDraft(); // the draft is finished — nothing to resume
 
+    initSeasonTheater(results);
     renderPodium(results);
     renderBracket(results, false);
     renderDraftGrades();
@@ -2871,15 +2908,107 @@
     });
   }
 
+  // ---- Season theater: replay the 15 years as an animated reveal -----------
+  /** Arm the ▶ button. Room echoes re-call showResults, so a replay that's
+   *  already running (or finished) for THIS draft is left untouched. */
+  function initSeasonTheater(results) {
+    const btn = $("#play-sim");
+    const box = $("#season-theater");
+    if (!btn || !box) return;
+    const key = draftSeedString();
+    if (ui._stKey === key && ui._stState) return; // playing or done — don't reset
+    ui._stKey = key;
+    ui._stState = null;
+    clearInterval(ui._stTimer);
+    box.classList.add("hidden");
+    $("#st-bars").innerHTML = "";
+    $("#st-feed").innerHTML = "";
+    btn.classList.remove("hidden");
+    btn.onclick = () => {
+      btn.classList.add("hidden");
+      runSeasonTheater(results);
+    };
+  }
+
+  function runSeasonTheater(results) {
+    ui._stState = "playing";
+    const box = $("#season-theater");
+    box.classList.remove("hidden");
+    const barsWrap = $("#st-bars");
+    barsWrap.innerHTML = "";
+    const rows = results.map((r) => {
+      const c = mgrColor(r.manager.id);
+      const row = el("div", "st-row");
+      row.innerHTML =
+        `<span class="st-name" style="color:${c}">${r.manager.isCpu ? "🤖 " : ""}${r.manager.name}</span>` +
+        `<span class="st-track"><i style="background:${c}"></i></span>` +
+        `<span class="st-wins">—</span><span class="st-rings"></span>`;
+      barsWrap.appendChild(row);
+      return row;
+    });
+    const feed = $("#st-feed");
+    feed.innerHTML = "";
+    const addFeed = (txt, kind) => {
+      feed.insertBefore(el("div", "st-item " + (kind || ""), txt), feed.firstChild);
+      while (feed.children.length > 6) feed.children[feed.children.length - 1].remove();
+    };
+    const years = results[0].eval.seasons.length;
+    let y = 0;
+    const step = () => {
+      if (y >= years) return finish();
+      $("#st-year").textContent = `Year ${y + 1} of ${years}`;
+      results.forEach((r, i) => {
+        const s = r.eval.seasons[y];
+        const w = Math.round(s.wins);
+        const bar = rows[i].querySelector(".st-track i");
+        if (bar) bar.style.width = Math.round((s.wins / 73) * 100) + "%";
+        const winsEl = rows[i].querySelector(".st-wins");
+        if (winsEl) winsEl.textContent = `${w}-${82 - w}`;
+        if (s.title) {
+          const rings = rows[i].querySelector(".st-rings");
+          if (rings) rings.textContent += "🏆";
+          addFeed(`Yr ${y + 1}: 🏆 ${r.manager.name} win the title at ${w}-${82 - w}`, "good");
+          SFX.play("bid");
+        }
+        (r.eval.advLog || []).forEach((evn) => {
+          if (evn.y === y + 1 && evn.kind === "bad" && !/Minutes limits/.test(evn.text)) {
+            addFeed(`${evn.text} — ${r.manager.name}`, "bad");
+          }
+        });
+      });
+      y++;
+    };
+    const finish = () => {
+      clearInterval(ui._stTimer);
+      ui._stState = "done";
+      $("#st-year").textContent = "Final";
+      $("#st-skip").classList.add("hidden");
+      addFeed(`🏁 ${results[0].manager.name} finish the era on top`, "good");
+      confettiBurst();
+      SFX.play("champion");
+    };
+    $("#st-skip").classList.remove("hidden");
+    $("#st-skip").onclick = () => {
+      while (ui._stState === "playing" && y <= years) step();
+    };
+    step();
+    ui._stTimer = setInterval(() => {
+      if (ui._stState === "playing") step();
+    }, 1100);
+  }
+
   function renderPodium(results) {
     const wrap = $("#results-podium");
     wrap.innerHTML = "";
     const medals = ["🥇", "🥈", "🥉"];
     results.forEach((r, i) => {
       const card = el("div", "podium-card" + (i === 0 ? " rank-1" : ""));
+      card.style.borderTop = `3px solid ${mgrColor(r.manager.id)}`;
+      const heads = STARTER_SLOTS.map((s) => miniPhotoHtml(r.manager.starters[s])).join("");
       card.innerHTML = `
         <div class="podium-rank">${medals[i] || `#${i + 1}`}</div>
-        <div class="podium-name">${r.manager.name}</div>
+        <div class="podium-name" style="color:${mgrColor(r.manager.id)}">${r.manager.name}</div>
+        <div class="podium-heads">${heads}</div>
         <div class="podium-record">Avg record ${r.eval.avgRecord}</div>
         <div class="podium-record">🏆 ${r.eval.championships} title${r.eval.championships === 1 ? "" : "s"} · peak ${r.eval.bestRecord}</div>
         <div class="podium-score">${Math.round(r.eval.composite)}</div>`;
@@ -2892,7 +3021,8 @@
     const tabs = $("#results-teamtabs");
     tabs.innerHTML = "";
     results.forEach((r, i) => {
-      const label = `${i === 0 ? "🏆 " : "#" + (i + 1) + " "}${r.manager.isCpu ? "🤖 " : ""}${r.manager.name}`;
+      const label = `<i class="rtt-dot" style="background:${mgrColor(r.manager.id)}"></i>` +
+        `${i === 0 ? "🏆 " : "#" + (i + 1) + " "}${r.manager.isCpu ? "🤖 " : ""}${r.manager.name}`;
       const b = el("button", "rtt" + (i === 0 ? " active" : ""), label);
       b.onclick = () => showResultTeam(results, i);
       tabs.appendChild(b);
@@ -2924,10 +3054,11 @@
       // Clean position-by-position roster (+ coach row when coaches are on).
       let rosterRows = STARTER_SLOTS.map((slot) => {
         const p = m.starters[slot];
-        if (!p) return `<div class="res-slot empty"><span class="res-pos">${slot}</span><span class="res-pname">— empty —</span></div>`;
+        if (!p) return `<div class="res-slot empty"><span class="res-pos">${slot}</span><span class="mini-cell"></span><span class="res-pname">— empty —</span></div>`;
         const gr = _gradeById && _gradeById.get(p.id);
         return `<div class="res-slot">
             <span class="res-pos">${slot}</span>
+            <span class="mini-cell">${miniPhotoHtml(p)}</span>
             <span class="res-pname">${tierBadge(p)} ${p.name}</span>
             ${priceTag(p.id)}
             ${gr ? `<span class="res-grade">${gr}</span>` : ""}
@@ -2939,20 +3070,22 @@
         const bp = (m.bench || [])[bi];
         rosterRows += bp
           ? `<div class="res-slot"><span class="res-pos">B${bi + 1}</span>
+               <span class="mini-cell">${miniPhotoHtml(bp)}</span>
                <span class="res-pname">${tierBadge(bp)} ${bp.name}</span>
                ${_gradeById && _gradeById.get(bp.id) ? `<span class="res-grade">${_gradeById.get(bp.id)}</span>` : ""}
                <span class="res-ptag">bench</span>
                <span class="res-prate">${careerRating(bp)}</span></div>`
-          : `<div class="res-slot empty"><span class="res-pos">B${bi + 1}</span><span class="res-pname">— empty —</span></div>`;
+          : `<div class="res-slot empty"><span class="res-pos">B${bi + 1}</span><span class="mini-cell"></span><span class="res-pname">— empty —</span></div>`;
       }
       if (ui.coachMode) {
         rosterRows += m.coach
           ? `<div class="res-slot coach"><span class="res-pos">🧠</span>
+               <span class="mini-cell">${miniPhotoHtml(m.coach)}</span>
                <span class="res-pname">${m.coach.name}</span>
                ${priceTag(m.coach.id)}
                <span class="res-ptag">${m.coach.style}</span>
                <span class="res-prate">${m.coach.overall}</span></div>`
-          : `<div class="res-slot empty"><span class="res-pos">🧠</span><span class="res-pname">— no coach —</span></div>`;
+          : `<div class="res-slot empty"><span class="res-pos">🧠</span><span class="mini-cell"></span><span class="res-pname">— no coach —</span></div>`;
       }
 
       // Strengths & weaknesses.
@@ -3028,7 +3161,7 @@
         : "";
 
       team.innerHTML = `
-        <h4>${i === 0 ? "🏆 " : `#${i + 1} `}${m.isCpu ? "🤖 " : ""}${m.name}</h4>
+        <h4><i class="rtt-dot" style="background:${mgrColor(m.id)}"></i>${i === 0 ? "🏆 " : `#${i + 1} `}${m.isCpu ? "🤖 " : ""}${m.name}</h4>
         <div class="res-stats">
           <div class="res-stat"><b>${ev.avgRecord}</b>Avg season record</div>
           <div class="res-stat"><b>${ev.bestRecord}</b>Best record at peak</div>

@@ -356,6 +356,12 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .abb-note { font-size: 12px; font-weight: 700; padding: 2px 2px; }
 .abb-note.muted { color: var(--muted); font-weight: 500; }
 
+/* Condensed sticky header (scrolling down the list): status + ticker tuck
+   away; the clock row, bid bar and tabs stay. Scroll up to bring them back. */
+.draft-sticky.condensed .my-status,
+.draft-sticky.condensed .pick-ticker { display: none; }
+.draft-sticky.condensed { padding-top: 6px; gap: 6px; }
+
 /* Pause */
 .pause-banner {
   background: rgba(255,176,32,0.14); border: 1px solid var(--warn); color: var(--warn);
@@ -569,7 +575,7 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .team-fill { font-size: 11px; color: var(--muted); }
 .team-card.on-clock .team-fill { color: var(--accent); font-weight: 700; }
 .slot-row {
-  display: grid; grid-template-columns: 46px 1fr auto; gap: 10px; align-items: center;
+  display: grid; grid-template-columns: 40px 30px 1fr auto; gap: 10px; align-items: center;
   padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 7px; background: var(--panel-2);
 }
 .slot-row.empty { border-style: dashed; opacity: 0.7; }
@@ -612,6 +618,45 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .slot-options .so { flex: 1 1 80px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; text-align: center; font-weight: 800; }
 .slot-options .so:hover { border-color: var(--accent); color: var(--accent); }
 
+/* ---------------- Mini headshots (rosters, results, podium) ---------------- */
+.mini-photo {
+  position: relative; display: inline-grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 8px; overflow: hidden;
+  background: radial-gradient(circle at 50% 35%, #243049, #0d1320);
+  border: 1px solid var(--line); vertical-align: middle; flex-shrink: 0;
+}
+.mini-photo i { font-style: normal; font-size: 10px; font-weight: 900; color: var(--accent); letter-spacing: 0.3px; }
+.mini-photo.coach i { color: var(--accent-2); }
+.mini-photo img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: top center; filter: saturate(1.3) contrast(1.1);
+}
+.mini-cell { display: grid; place-items: center; }
+.podium-heads { display: flex; justify-content: center; gap: 4px; margin: 8px 0 2px; }
+.rtt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+/* ---------------- Season theater (animated 15-year reveal) ---------------- */
+.season-theater {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 14px; margin: 12px 0;
+}
+.st-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.st-year { font-size: 17px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
+.st-bars { display: grid; gap: 7px; margin-bottom: 10px; }
+.st-row { display: grid; grid-template-columns: minmax(72px, 130px) 1fr 52px auto; gap: 8px; align-items: center; }
+.st-name { font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-track { height: 12px; border-radius: 7px; background: #11141a; border: 1px solid var(--line); overflow: hidden; }
+.st-track i { display: block; height: 100%; width: 0%; border-radius: 7px; transition: width 0.6s ease; }
+.st-wins { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.st-rings { font-size: 12px; letter-spacing: -2px; }
+.st-feed { display: grid; gap: 5px; }
+.st-item {
+  font-size: 12.5px; padding: 6px 10px; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--line);
+}
+.st-item.good { border-color: rgba(61,220,132,0.4); }
+.st-item.bad { border-color: rgba(255,176,32,0.4); }
+
 /* ---------------- Results ---------------- */
 .podium { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 18px 0; }
 .podium-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; text-align: center; position: relative; }
@@ -652,7 +697,7 @@ select:focus, input:focus { border-color: var(--accent-2); }
 @media (max-width: 720px) { .res-cols { grid-template-columns: 1fr; } }
 .res-rostercard, .res-swcard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
 .res-rostercard .res-subhead, .res-swcard .res-subhead { margin-top: 0; }
-.res-slot { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto auto auto; gap: 8px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.res-slot { display: grid; grid-template-columns: 34px 30px minmax(0, 1fr) auto auto auto auto; gap: 8px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); }
 .res-price { font-size: 12px; font-weight: 800; color: var(--good); white-space: nowrap; }
 .res-slot:last-child { border-bottom: none; }
 .res-slot.empty { opacity: 0.55; }
