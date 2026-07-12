@@ -2608,7 +2608,12 @@
     // Shared 15-year window: teams trade head-to-head wins, and exactly one
     // champion is crowned per year — titles are zero-sum across this room.
     POSTSEASON.leagueSim(results.map((r) => r.eval), draftSeedString());
-    results.sort((a, b) => b.eval.composite - a.eval.composite);
+    // RINGS RULE THE RANKING: the era belongs to whoever actually won it
+    // head-to-head. Composite (era quality) only breaks ties — a team can
+    // never rank above someone with more championships.
+    results.sort(
+      (a, b) => (b.eval.championships - a.eval.championships) || (b.eval.composite - a.eval.composite)
+    );
     ui.resultTeam = 0; // default to the champion's analysis
     clearSavedDraft(); // the draft is finished — nothing to resume
 
@@ -2802,8 +2807,8 @@
       ui.live && ui.mySeat != null ? results.findIndex((r) => r.manager.id === ui.mySeat) : -1;
     $("#final-sub").textContent =
       meIdx >= 0
-        ? `You finished ${ordinal(meIdx + 1)} of ${results.length}. Final composite scores over the 15-year run:`
-        : `Final standings — composite scores over the 15-year run:`;
+        ? `You finished ${ordinal(meIdx + 1)} of ${results.length}. Ranked by rings won, then composite:`
+        : `Final standings — ranked by rings won, then composite:`;
 
     const wrap = $("#final-rankings");
     wrap.innerHTML = "";
@@ -2814,7 +2819,7 @@
         "div",
         "fr-row" + (isMe ? " me" : ""),
         `<span class="fr-rank">${medals[i] || "#" + (i + 1)}</span>
-         <span class="fr-name">${r.manager.isCpu ? "🤖 " : ""}${r.manager.name}${isMe ? ' <span class="you-badge">YOU</span>' : ""}</span>
+         <span class="fr-name">${r.manager.isCpu ? "🤖 " : ""}${r.manager.name}${isMe ? ' <span class="you-badge">YOU</span>' : ""} ${"🏆".repeat(Math.min(9, r.eval.championships))}</span>
          <span class="fr-score">${Math.round(r.eval.composite)}</span>`
       ));
     });
@@ -3186,8 +3191,18 @@
         ? fold("🌪️ Adversity log", `<ul class="res-pairings">${ev.advLog.map((e) => `<li class="${e.kind}">${e.text}</li>`).join("")}</ul>`)
         : "";
 
+      // One line that makes the ranking self-explanatory: rings first, then
+      // the era-quality facts behind the composite tiebreak.
+      const whyBits = [
+        `🏆 ${ev.championships} ring${ev.championships === 1 ? "" : "s"}${ev.titleYears && ev.titleYears.length ? ` (yr ${ev.titleYears.join(", ")})` : ""}`,
+        `${ev.avgRecord} era average`,
+        `${playoffLabel(ev.avgPlayoffIndex)} typical postseason`,
+        `cohesion ${ev.cohesion}`,
+      ];
+
       team.innerHTML = `
         <h4><i class="rtt-dot" style="background:${mgrColor(m.id)}"></i>${i === 0 ? "🏆 " : `#${i + 1} `}${m.isCpu ? "🤖 " : ""}${m.name}</h4>
+        <div class="res-why"><b>Ranked #${i + 1}</b> — rings first, quality as tiebreak: ${whyBits.join(" · ")}</div>
         <div class="res-stats">
           <div class="res-stat"><b>${ev.avgRecord}</b>Avg season record</div>
           <div class="res-stat"><b>${ev.bestRecord}</b>Best record at peak</div>
