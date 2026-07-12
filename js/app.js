@@ -139,6 +139,11 @@
     return `<span class="mini-photo${p.isCoach ? " coach" : ""}"><i>${p.initials || "?"}</i>${img}</span>`;
   }
 
+  // Draft/Nominate needs a confirm tap on touch screens only (fat-finger
+  // protection); mouse users keep single-click.
+  const touchConfirm = () =>
+    typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+
   const injuryDot = (risk) => {
     if (risk >= 60) return `<span class="injury-dot" title="High injury risk (${risk})">🔴</span>`;
     if (risk >= 38) return `<span class="injury-dot" title="Moderate injury risk (${risk})">🟡</span>`;
@@ -228,6 +233,10 @@
     // Sound: browsers require a user gesture before audio — unlock on the
     // first tap anywhere. The 🔊 toggle persists across sessions.
     document.addEventListener("click", () => SFX.unlock(), { once: true });
+    // Coming back to the tab ends any your-turn title flashing.
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) clearTurnAlert();
+    });
     const muteBtn = $("#mute-btn");
     const paintMute = () => (muteBtn.textContent = SFX.muted ? "🔇" : "🔊");
     muteBtn.addEventListener("click", () => { SFX.toggle(); paintMute(); });
@@ -438,6 +447,7 @@
     if (!Array.isArray(picks)) picks = Object.values(picks); // Firebase array quirk
     applyConfig(data.cfg);
     if (Array.isArray(data.cpu)) ui.cpuFlags = data.cpu.map(Boolean);
+    ui.seatsClaimed = data.seats || {}; // who's joined (for the share panel)
     ui.gameGen++; // invalidate any pending timers
     rebuildGameFrom(names, picks, ui.cpuFlags);
     syncLiveAuction(data.auction || null);
@@ -1670,6 +1680,25 @@
     });
   }
 
+  /** Live rooms: one chip per seat — claimed ✓ / CPU 🤖 / still open — so the
+   *  host can see at a glance when everyone's actually in. */
+  function renderSeatStatus() {
+    const box = $("#seat-status");
+    if (!ui.live || !game) { box.classList.add("hidden"); return; }
+    const claimed = ui.seatsClaimed || {};
+    box.innerHTML =
+      `<span class="seat-status-label">Seats</span>` +
+      game.managers.map((m, i) => {
+        if ((ui.cpuFlags || [])[i]) return `<span class="seat-chip cpu">🤖 ${m.name}</span>`;
+        const isMe = ui.mySeat === i;
+        if (claimed[i] != null || isMe) {
+          return `<span class="seat-chip claimed">✓ ${m.name}${isMe ? " (you)" : ""}</span>`;
+        }
+        return `<span class="seat-chip">○ ${m.name} — open</span>`;
+      }).join("");
+    box.classList.remove("hidden");
+  }
+
   // ---- Live-room emoji reactions ------------------------------------------
   const REACTIONS = ["🔥", "😂", "🗑️", "😱", "💪", "🥶"];
   function renderReactBar() {
@@ -1737,8 +1766,10 @@
       instrEl.textContent = ui.clockSeconds > 0 || game.auction
         ? "Live room — picks sync in real time."
         : "Slow draft — no clock. Close the tab and come back whenever; your seat and the room are saved, and the draft waits.";
+      renderSeatStatus();
       renderReactBar();
     } else {
+      $("#seat-status").classList.add("hidden");
       $("#react-bar").classList.add("hidden");
       copyBtn.textContent = "🔗 Copy link";
       turnEl.innerHTML = `🔗 It's <b>${m.name}</b>'s turn`;
@@ -1904,6 +1935,27 @@
     return { player: weightedPick(pool.map((x) => x.p), weights), slot: "COACH" };
   }
 
+  // ---- Your-turn alerts for backgrounded tabs -------------------------------
+  function notifyYourTurn() {
+    if (!document.hidden) return; // tab is visible — the header glow covers it
+    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
+    SFX.play("yourturn");
+    if (ui._titleTimer) return;
+    ui._baseTitle = ui._baseTitle || document.title || "NBA Re-Draft";
+    let flip = false;
+    ui._titleTimer = setInterval(() => {
+      flip = !flip;
+      document.title = flip ? "🟢 YOUR PICK — NBA Re-Draft" : ui._baseTitle;
+    }, 1200);
+    document.title = "🟢 YOUR PICK — NBA Re-Draft";
+  }
+  function clearTurnAlert() {
+    if (!ui._titleTimer) return;
+    clearInterval(ui._titleTimer);
+    ui._titleTimer = null;
+    if (ui._baseTitle) document.title = ui._baseTitle;
+  }
+
   function renderStatus() {
     const m = game.currentManager();
     $("#sticky-onclock").textContent = (m.isCpu ? "🤖 " : "") + m.name;
@@ -1942,6 +1994,11 @@
     // Pulse the Players tab + light up the whole header whenever a human on
     // this device is on the clock.
     const yourTurn = !m.isCpu && (!ui.live || myTurn());
+    // Backgrounded tab: flash the title + vibrate + chime the moment it
+    // becomes your turn (the lifeline of slow drafts).
+    if (yourTurn && !ui._wasMyTurn) notifyYourTurn();
+    if (!yourTurn) clearTurnAlert();
+    ui._wasMyTurn = yourTurn;
     $("#draft-sticky").classList.toggle("live-turn", yourTurn);
     $("#undo-btn").classList.toggle("hidden", ui.online || !game.pickLog.length || !!ui.auction);
     $("#draft-tabs").querySelectorAll(".dt").forEach((b) => {
@@ -2200,7 +2257,25 @@
       if (canDraft) {
         const label = game.auction ? "Nominate 🔨" : p.isCoach ? "Hire" : "Draft";
         const btn = el("button", "btn primary mini", label);
-        btn.onclick = () => onDraftClick(p);
+        // Touch screens: first tap arms, second confirms — a slim row is too
+        // easy to fat-finger for a pick to commit on one tap. Mouse pointers
+        // (and bids, which must stay fast) keep single-click.
+        btn.onclick = () => {
+          if (touchConfirm() && !btn._armed) {
+            btn._armed = true;
+            btn.textContent = "Confirm ✓";
+            btn.classList.add("confirming");
+            setTimeout(() => {
+              if (btn._armed) {
+                btn._armed = false;
+                btn.textContent = label;
+                btn.classList.remove("confirming");
+              }
+            }, 2500);
+            return;
+          }
+          onDraftClick(p);
+        };
         actions.appendChild(btn);
       } else if (auctionLive) {
         actions.appendChild(el("span", "slot-sub", "🔨 auction live"));

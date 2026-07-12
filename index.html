@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="icon" type="image/png" href="icon-192.png" />
   <title>NBA Re-Draft — Snake Draft Dynasty Builder</title>
-  <link rel="stylesheet" href="styles.css?v=40" />
+  <link rel="stylesheet" href="styles.css?v=41" />
 </head>
 <body>
   <header class="topbar">
@@ -228,6 +228,8 @@
           <span class="share-instr"></span>
         </div>
         <button id="copy-link" class="btn primary">🔗 Copy link</button>
+        <!-- Live rooms: who's claimed a seat, so the host knows everyone's in -->
+        <div id="seat-status" class="seat-status hidden"></div>
         <div id="react-bar" class="react-bar hidden"></div>
       </div>
 
@@ -377,16 +379,16 @@
   <!-- Firebase (optional, for live online sync). Falls back to link-relay if absent. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=40"></script>
-  <script src="js/firebase-sync.js?v=40"></script>
+  <script src="js/firebase-config.js?v=41"></script>
+  <script src="js/firebase-sync.js?v=41"></script>
 
-  <script src="js/sfx.js?v=40"></script>
-  <script src="js/players.js?v=40"></script>
-  <script src="js/coaches.js?v=40"></script>
-  <script src="js/scoring.js?v=40"></script>
-  <script src="js/postseason.js?v=40"></script>
-  <script src="js/draft.js?v=40"></script>
-  <script src="js/app.js?v=40"></script>
+  <script src="js/sfx.js?v=41"></script>
+  <script src="js/players.js?v=41"></script>
+  <script src="js/coaches.js?v=41"></script>
+  <script src="js/scoring.js?v=41"></script>
+  <script src="js/postseason.js?v=41"></script>
+  <script src="js/draft.js?v=41"></script>
+  <script src="js/app.js?v=41"></script>
   <script>
     // Installable app + offline play (https only; no-op locally/in tests).
     if ("serviceWorker" in navigator && location.protocol === "https:") {
