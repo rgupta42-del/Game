@@ -228,6 +228,12 @@
     $("#coach-toggle").addEventListener("change", syncCapUI);
     $("#order-select").addEventListener("change", syncCapUI);
     $("#cap-amount").addEventListener("change", () => { capTouched = true; });
+    // A bench choice the user made by hand must survive a preset tap — the
+    // presets silently zeroing it (inside the collapsed Advanced section) read
+    // as "the bench option doesn't work".
+    let benchTouched = false;
+    $("#bench-select").addEventListener("change", () => { benchTouched = true; });
+    ui._benchTouched = () => benchTouched;
     syncCapUI();
 
     // Sound: browsers require a user gesture before audio — unlock on the
@@ -270,7 +276,7 @@
       $("#cap-toggle").checked = p.cap;
       if (p.capAmt) $("#cap-amount").value = p.capAmt;
       $("#challenge-select").value = p.chal;
-      $("#bench-select").value = p.bench;
+      if (!ui._benchTouched || !ui._benchTouched()) $("#bench-select").value = p.bench;
       // Era chips: all on.
       $("#era-filters").querySelectorAll("input").forEach((c) => { c.checked = true; });
       // CPU seats.
@@ -1351,6 +1357,37 @@
     const spendCeil = Math.max(1, bank - softReserve);
     let v = Math.min(base * premium, Math.max(planCeil, Math.min(base * 0.95, spendCeil)));
 
+    // 2.5) POSITIONAL SUPPLY vs DEMAND. Two effects:
+    //   • Patience — a far better player at this slot is still out there?
+    //     Hold the slot and the money for the star.
+    //   • Oversupply — more comparable-or-better players remain at this
+    //     position than open slots across the room? The whole class is
+    //     discounted (nobody pays $50 for Hakeem with three Shaqs left), so
+    //     prices grade down smoothly instead of cliffing to $1 at the end.
+    if (!p.isCoach && !game.rosterComplete(m)) {
+      const open = new Set(game.unfilledStarterSlots(m));
+      const shared = p.eligible.filter((s) => open.has(s));
+      if (shared.length) {
+        let posTop = 0;
+        let comparable = 1; // p itself
+        for (const q of PLAYER_POOL) {
+          if (q.id === p.id || !game.isAvailable(q.id) || !poolAllowed(q)) continue;
+          if (!q.eligible.some((s) => shared.includes(s))) continue;
+          const qv = proposedValue(q);
+          if (qv > posTop) posTop = qv;
+          if (qv >= base * 0.85) comparable++;
+        }
+        if (slots > 1 && posTop >= base * 1.5) v *= 0.55; // wait for the better one
+        let demand = 0;
+        game.managers.forEach((mm) => {
+          if (game.rosterComplete(mm)) return;
+          const oo = game.unfilledStarterSlots(mm);
+          if (p.eligible.some((s) => oo.includes(s))) demand++;
+        });
+        if (comparable > demand) v *= Math.max(0.55, 1 - 0.12 * (comparable - demand));
+      }
+    }
+
     // 3) Use it or lose it: leftover cap at the end is worth nothing. When the
     // bank covers the whole remaining market, surplus chases the best left.
     const market = cpuMarketTopK(m, slots);
@@ -1365,8 +1402,19 @@
   }
 
   /** CPU nomination strategy: usually open bidding on their own best target,
-   *  but sometimes float a pricey player they DON'T need to drain rivals. */
+   *  but sometimes float a pricey player they DON'T need to drain rivals.
+   *  Stars go on the block early — money gets committed while everyone can
+   *  still bid, so elite players don't slip to uncontested endgame lots. */
   function cpuNomination(m) {
+    // Free-star check: if this CPU is the ONLY team that can still bid on a
+    // valuable player, nominate him immediately — he comes at the opening bid.
+    // (The same endgame trick a sharp human plays; now everyone plays it.)
+    const soloFloor = capAmount() * 0.15;
+    for (const p of PLAYER_POOL) {
+      if (!game.isAvailable(p.id) || !poolAllowed(p) || proposedValue(p) < soloFloor) continue;
+      const bidders = eligibleBidders(p);
+      if (bidders.length === 1 && bidders[0].id === m.id) return { player: p, slot: null };
+    }
     if (Math.random() < 0.35) {
       const open = new Set(game.unfilledStarterSlots(m));
       const drain = PLAYER_POOL
@@ -1376,7 +1424,20 @@
         .sort((a, b) => proposedValue(b) - proposedValue(a))[0];
       if (drain && proposedValue(drain) >= capAmount() * 0.12) return { player: drain, slot: null };
     }
-    return cpuChoose(m);
+    const own = cpuChoose(m);
+    if (own && own.player && !own.player.isCoach) {
+      const open = new Set(game.unfilledStarterSlots(m));
+      let best = null;
+      for (const q of PLAYER_POOL) {
+        if (!game.isAvailable(q.id) || !poolAllowed(q)) continue;
+        if (!q.eligible.some((s) => open.has(s))) continue;
+        if (!best || proposedValue(q) > proposedValue(best)) best = q;
+      }
+      if (best && best.id !== own.player.id && proposedValue(best) >= proposedValue(own.player) * 1.3) {
+        return { player: best, slot: null };
+      }
+    }
+    return own;
   }
 
   function openAuction(player) {
