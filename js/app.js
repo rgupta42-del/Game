@@ -2605,9 +2605,13 @@
       manager: m,
       eval: evaluateRoster({ starters: m.starters, bench: m.bench, coach: m.coach }),
     }));
-    // Shared 15-year window: teams trade head-to-head wins, and exactly one
-    // champion is crowned per year — titles are zero-sum across this room.
-    POSTSEASON.leagueSim(results.map((r) => r.eval), draftSeedString());
+    // Shared 15-year window: teams trade head-to-head wins and each year's
+    // title is decided by played-out playoff series (then a Finals against
+    // "the Field" — the best of the rest of the league). Also returns the
+    // Monte-Carlo "best-crafted" verdict across hundreds of alternate eras.
+    const entries = results.map((r) => ({ eval: r.eval, profile: profileOf(r), manager: r.manager }));
+    ui._era = { entries };
+    ui._mc = POSTSEASON.leagueSim(entries, draftSeedString());
     // RINGS RULE THE RANKING: the era belongs to whoever actually won it
     // head-to-head. Composite (era quality) only breaks ties — a team can
     // never rank above someone with more championships.
@@ -2619,6 +2623,7 @@
 
     initSeasonTheater(results);
     renderPodium(results);
+    renderCraftVerdict();
     renderDraftGrades();
     renderResultsDetail(results);
     initLegendsUI(results);
@@ -3028,6 +3033,40 @@
     }, 1100);
   }
 
+  /** Monte-Carlo "best-crafted" panel: the standings show THIS timeline; this
+   *  shows who built the team most likely to win ANY timeline. */
+  function renderCraftVerdict() {
+    const box = $("#craft-verdict");
+    if (!box) return;
+    const mc = ui._mc;
+    const era = ui._era;
+    if (!mc || !era || !era.entries || era.entries.length < 2) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    const rows = era.entries
+      .map((en, i) => ({ en, i, pct: mc.mostPct[i], exp: mc.expRings[i] }))
+      .sort((a, b) => b.pct - a.pct || b.exp - a.exp);
+    const maxPct = Math.max(1, rows[0].pct);
+    box.innerHTML =
+      `<div class="res-subhead">🧪 Best-crafted verdict — ${mc.runs} alternate eras</div>` +
+      `<p class="cv-sub">The standings above are this timeline. Re-running these exact rosters through ` +
+      `${mc.runs} eras shows who built the team most likely to win any of them.</p>` +
+      rows
+        .map(({ en, i, pct, exp }) => {
+          const c = mgrColor(en.manager.id);
+          return `<div class="cv-row">
+            <span class="cv-name" style="color:${c}">${en.manager.isCpu ? "🤖 " : ""}${en.manager.name}</span>
+            <span class="cv-track"><i style="width:${Math.round((pct / maxPct) * 100)}%;background:${c}"></i></span>
+            <span class="cv-stat">most rings in <b>${pct}%</b> of eras · ${exp.toFixed(1)} expected</span>
+          </div>`;
+        })
+        .join("") +
+      `<p class="cv-sub">The rest of the league ("the Field") takes ${mc.fieldPct}% of the titles.</p>`;
+    box.classList.remove("hidden");
+  }
+
   function renderPodium(results) {
     const wrap = $("#results-podium");
     wrap.innerHTML = "";
@@ -3186,10 +3225,83 @@
         `<span><i class="tl-k"></i>Playoffs</span>` +
         `<span><i class="tl-k cold"></i>Lottery</span></div>`;
 
-      // Adversity log (only when adversities are enabled for this draft).
-      const advHtml = ev.advLog && ev.advLog.length
-        ? fold("🌪️ Adversity log", `<ul class="res-pairings">${ev.advLog.map((e) => `<li class="${e.kind}">${e.text}</li>`).join("")}</ul>`)
+      // Resilience: forward-looking fragility grade, paired with the log of
+      // what actually went wrong.
+      const resil = SCORING.rosterResilience(rosterRef);
+      const resilLine = resil
+        ? `<div class="res-resil">🛡️ <b>Resilience ${resil.grade}</b> — ${resil.notes.join("; ")}.</div>`
         : "";
+      const advHtml = ev.advLog && ev.advLog.length
+        ? fold("🌪️ Adversity & resilience", resilLine +
+            `<ul class="res-pairings">${ev.advLog.map((e) => `<li class="${e.kind}">${e.text}</li>`).join("")}</ul>`)
+        : "";
+
+      // Title window: the seasons this core plays within 4 wins of its peak —
+      // and whether the rings actually landed inside it.
+      const peakW = Math.max(...ev.seasons.map((s) => s.wins));
+      const inWin = ev.seasons.map((s) => s.wins >= peakW - 4);
+      const ranges = [];
+      for (let y = 0; y < inWin.length; y++) {
+        if (!inWin[y]) continue;
+        const start = y + 1;
+        while (y + 1 < inWin.length && inWin[y + 1]) y++;
+        ranges.push(start === y + 1 ? `${start}` : `${start}–${y + 1}`);
+      }
+      const stAll = SCORING.starterPlayers(rosterRef);
+      const byAging = stAll.slice().sort((a, b) => b.career.aging - a.career.aging);
+      const ringsIn = (ev.titleYears || []).filter((y) => inWin[y - 1]).length;
+      const windowLine =
+        `<div class="res-window">📅 <b>Title window:</b> year${ranges.length === 1 && !ranges[0].includes("–") ? "" : "s"} ${ranges.join(", ")}` +
+        ` · rings inside it: ${ringsIn} of ${ev.championships}` +
+        (byAging.length > 1 ? ` · ages best: ${byAging[0].name} · fades first: ${byAging[byAging.length - 1].name}` : "") +
+        `</div>`;
+
+      // Playoff risers / faders: the clutch gene quietly drives the playoff
+      // sim — surface who elevates and who shrinks.
+      const risers = stAll.filter((p) => p.ext && p.ext.clutch >= 88).map((p) => p.name);
+      const faders = stAll.filter((p) => p.ext && p.ext.clutch <= 62).map((p) => p.name);
+      const clutchLine = risers.length || faders.length
+        ? `<div class="sw-clutch">${risers.length ? `🎯 Playoff risers: <b>${risers.join(", ")}</b>` : ""}` +
+          `${risers.length && faders.length ? " · " : ""}` +
+          `${faders.length ? `🥶 Postseason faders: <b>${faders.join(", ")}</b>` : ""}</div>`
+        : "";
+
+      // Rival matchups: era-long best-of-7 odds vs every other team, the style
+      // edge/risk behind them, and the official timeline's playoff meetings.
+      let muHtml = "";
+      if (ui._era && ui._era.entries && ev._idx != null) {
+        const entries = ui._era.entries;
+        const mine = entries[ev._idx];
+        const TRAITS = [
+          ["floor spacing", (p) => p.ratings.shooting],
+          ["rim protection", (p) => p.ratings.interiorD],
+          ["playmaking", (p) => p.ratings.playmaking],
+          ["perimeter defense", (p) => p.ratings.perimeterD],
+        ];
+        const avg = (ps, f) => (ps.length ? ps.reduce((s, p) => s + f(p), 0) / ps.length : 0);
+        const rows = entries
+          .map((en, j) => {
+            if (j === ev._idx) return "";
+            const pct = Math.round(POSTSEASON.seriesWinPct(mine.profile, en.profile, 250) * 100);
+            const diffs = TRAITS
+              .map(([label, f]) => ({ label, d: avg(mine.profile.starters, f) - avg(en.profile.starters, f) }))
+              .sort((a, b) => b.d - a.d);
+            const edge = diffs[0], risk = diffs[diffs.length - 1];
+            const rec = ev._h2h && ev._h2h[j] ? ev._h2h[j] : { w: 0, l: 0 };
+            const met = rec.w + rec.l;
+            const c = mgrColor(en.manager.id);
+            return `<div class="mu-row">
+                <span class="mu-name" style="color:${c}">${en.manager.isCpu ? "🤖 " : ""}${en.manager.name}</span>
+                <span class="mu-bar"><i style="width:${pct}%"></i></span>
+                <b class="mu-pct">${pct}%</b>
+              </div>
+              <div class="mu-note">${edge.d > 1.5 ? `edge: ${edge.label}` : "no clear stylistic edge"}` +
+              `${risk.d < -1.5 ? ` · watch: ${risk.label}` : ""}` +
+              `${met ? ` · met ${met}× in these playoffs (won ${rec.w})` : " · never met in these playoffs"}</div>`;
+          })
+          .join("");
+        muHtml = fold("⚔️ Rival matchups — your best-of-7 odds", rows);
+      }
 
       // One line that makes the ranking self-explanatory: rings first, then
       // the era-quality facts behind the composite tiebreak.
@@ -3203,12 +3315,14 @@
       team.innerHTML = `
         <h4><i class="rtt-dot" style="background:${mgrColor(m.id)}"></i>${i === 0 ? "🏆 " : `#${i + 1} `}${m.isCpu ? "🤖 " : ""}${m.name}</h4>
         <div class="res-why"><b>Ranked #${i + 1}</b> — rings first, quality as tiebreak: ${whyBits.join(" · ")}</div>
+        ${windowLine}
         <div class="res-stats">
           <div class="res-stat"><b>${ev.avgRecord}</b>Avg season record</div>
           <div class="res-stat"><b>${ev.bestRecord}</b>Best record at peak</div>
           <div class="res-stat"><b>${ev.championships}</b>Total championships won</div>
           <div class="res-stat"><b>${playoffLabel(ev.avgPlayoffIndex)}</b>Typical postseason</div>
           <div class="res-stat"><b>${ev.cohesion}</b>Team cohesion</div>
+          <div class="res-stat" title="${resil ? resil.notes.join("; ") : ""}"><b>${resil ? resil.grade : "—"}</b>Resilience</div>
           <div class="res-stat"><b>${Math.round(ev.composite)}</b>Composite score</div>
           ${ui.capMode ? `<div class="res-stat"><b>$${managerSpent(m)}</b>Spent of $${capAmount()} cap</div>` : ""}
         </div>
@@ -3223,8 +3337,10 @@
               <div><div class="sw-head good">Strengths</div><ul>${swList(sw.strengths, "good", "No standout strengths")}</ul></div>
               <div><div class="sw-head bad">Weaknesses</div><ul>${swList(sw.weaknesses, "bad", "No glaring weaknesses")}</ul></div>
             </div>
+            ${clutchLine}
           </div>
         </div>
+        ${muHtml}
         ${advHtml}
         ${synHtml}
         ${effHtml}

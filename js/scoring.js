@@ -1066,6 +1066,40 @@ function adversityPlan(ctx) {
   return { pens, events };
 }
 
+/**
+ * Forward-looking fragility read: how likely is this roster to survive its own
+ * 15 years? Star-weighted injury exposure, value concentration in one player,
+ * and locker-room volatility, folded into a letter grade + driver notes.
+ */
+function rosterResilience(roster) {
+  const st = starterPlayers(roster);
+  if (!st.length) return null;
+  const wts = st.map((p) => Math.max(1, careerRating(p) - 65));
+  const wsum = wts.reduce((a, b) => a + b, 0);
+  const injAvg = st.reduce((s, p, i) => s + p.injuryRisk * wts[i], 0) / wsum;
+  const topShare = Math.max(...wts) / wsum; // value concentrated in one star
+  const vol = st.reduce((s, p) => s + (VOLATILITY[p.id] || 0), 0);
+
+  const score = clamp(Math.round(96 - (injAvg - 25) * 0.85 - Math.max(0, topShare - 0.3) * 110 - vol * 0.4), 0, 99);
+  const grade =
+    score >= 85 ? "A" : score >= 78 ? "A−" : score >= 70 ? "B+" : score >= 62 ? "B" :
+    score >= 54 ? "B−" : score >= 46 ? "C+" : score >= 38 ? "C" : "D";
+
+  const notes = [];
+  const fragile = st.filter((p) => p.injuryRisk >= 55).map((p) => p.name);
+  if (fragile.length) notes.push(`heavy injury exposure (${fragile.join(", ")})`);
+  else if (injAvg <= 32) notes.push("durable core");
+  if (topShare > 0.34) {
+    const star = st[wts.indexOf(Math.max(...wts))];
+    notes.push(`value concentrated in ${star.name} — one absence costs a lot`);
+  } else {
+    notes.push("value spread across the lineup");
+  }
+  const spicy = st.filter((p) => (VOLATILITY[p.id] || 0) >= 12).map((p) => p.name);
+  if (spicy.length) notes.push(`locker-room risk carried (${spicy.join(", ")})`);
+  return { grade, score, notes };
+}
+
 /** Full 15-season evaluation of a roster. */
 function evaluateRoster(roster) {
   const ctx = rosterContext(roster); // hoist all season-invariant work out of the loop
@@ -1375,6 +1409,7 @@ const SCORING = {
   careerArc,
   evaluateRoster,
   setAdversities,
+  rosterResilience,
   playoffLabel,
   pickFitGrade,
   analyzeRoster,

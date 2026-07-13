@@ -163,70 +163,158 @@
   }
 
   /**
-   * Shared-league simulation: every drafted team lives in the SAME 15-year
-   * window, so they trade head-to-head wins and only one champion is crowned
-   * per year — titles are zero-sum across the room.
+   * Shared-league simulation v2: every drafted team lives in the SAME 15-year
+   * window, and each year's title is decided by PLAYED-OUT playoff series —
+   * not a probability draw.
    *
-   * Mutates each eval in place:
-   *  • Each season, each pair plays ~4 head-to-head games; expected wins move
-   *    from the weaker to the stronger roster (zero-sum, elo-style).
-   *  • One title per year: room teams claim it in proportion to their title
-   *    odds (scaled down when contenders collide — superteams cap each other);
-   *    otherwise "the Field" (the rest of the league) wins that year.
-   *  • championships / titleYears / records / composite are recomputed so the
-   *    gold bars on the win chart line up EXACTLY with the titles shown.
+   *  • Regular season: each pair trades ~4 head-to-head games per year
+   *    (zero-sum, elo-style) on top of their base projection.
+   *  • Playoffs: teams are seeded by that year's record and play a best-of-7
+   *    bracket using per-year strength (aging curves travel into the bracket,
+   *    so a fading core loses its late-era series).
+   *  • The Field: the bracket champion must then beat the best of the rest of
+   *    the league in one more series — weak rooms don't hand out 15 rings.
+   *  • Monte Carlo: the same era is re-run `mcRuns` times on fresh seeds to
+   *    measure who BUILT the best team (expected rings, % of eras with the
+   *    most rings), separating craft from timeline luck.
+   *
+   * `entries` = [{ eval, profile }]. Mutates each eval in place with the
+   * official timeline (adjusted wins, title flags, championships, titleYears,
+   * composite, per-rival playoff series record in _h2h, entry index in _idx)
+   * and returns the Monte-Carlo summary { expRings, mostPct, fieldPct, runs }.
    */
-  function leagueSim(evals, seedStr) {
-    if (!evals || evals.length < 2) return;
-    const N = evals.length;
-    const rnd = mulberry32(hashStr("league·" + seedStr));
-    const years = evals[0].seasons.length;
+  function leagueSim(entries, seedStr, mcRuns) {
+    if (!entries || entries.length < 2) return null;
+    const N = entries.length;
+    const years = entries[0].eval.seasons.length;
+    const runs = mcRuns == null ? 400 : mcRuns;
 
-    for (let y = 0; y < years; y++) {
-      const ss = evals.map((e) => e.seasons[y]);
-      // 1) Head-to-head schedule: zero-sum win swings by strength gap.
-      const base = ss.map((s) => s.wins);
-      ss.forEach((s, i) => {
+    // Deterministic head-to-head schedule (same in every alternate era).
+    const baseWins = entries.map((en) => en.eval.seasons.map((s) => s.wins));
+    const adjWins = entries.map((en, i) =>
+      en.eval.seasons.map((s, y) => {
         let d = 0;
         for (let j = 0; j < N; j++) {
           if (j === i) continue;
-          const p = 1 / (1 + Math.pow(10, (base[j] - base[i]) / 13));
+          const p = 1 / (1 + Math.pow(10, (baseWins[j][y] - baseWins[i][y]) / 13));
           d += (p - 0.5) * 4;
         }
-        s.wins = Math.max(10, Math.min(73, s.wins + d));
-      });
-      // 2) One ring per year.
-      const probs = ss.map((s) => s.titleProb);
-      const tot = probs.reduce((a, b) => a + b, 0);
-      const scale = tot > 0.9 ? 0.9 / tot : 1; // contenders knock each other out
-      let u = rnd();
-      for (let i = 0; i < N; i++) {
-        u -= probs[i] * scale;
-        if (u <= 0) { ss[i].title = true; break; }
+        return Math.max(10, Math.min(73, baseWins[i][y] + d));
+      })
+    );
+    // Per-year playoff strength: the era-average profile strength shifted by
+    // how good THAT season is (mirrors the profile formula's weights).
+    const yearStrength = entries.map((en, i) =>
+      en.eval.seasons.map(
+        (s, y) =>
+          en.profile.strength +
+          (s.playoffIndex - en.eval.avgPlayoffIndex) * 0.55 +
+          (adjWins[i][y] - en.eval.avgWins) * 0.45
+      )
+    );
+
+    const HOME = [1, 1, 0, 0, 1, 0, 1];
+    // Fast best-of-7 (no game logs): a is the higher seed. Returns true if a wins.
+    function seriesWin(a, b, rnd) {
+      let wa = 0, wb = 0;
+      for (let g = 0; wa < 4 && wb < 4; g++) {
+        const diff = a.s - b.s + (HOME[g] === 1 ? 2.6 : -2.6) + (a.c - b.c) * 0.06;
+        if (rnd() < 1 / (1 + Math.exp(-diff / 7.5))) wa++;
+        else wb++;
       }
-      // u > 0 → the Field won this year; nobody in the room gets the ring.
+      return wa === 4;
+    }
+    const ORDERS = { 1: [1], 2: [1, 2], 4: [1, 4, 2, 3], 8: [1, 8, 4, 5, 2, 7, 3, 6] };
+
+    /** One full 15-year era. onSeries(winnerIdx, loserIdx) collects h2h. */
+    function simEra(rnd, onSeries) {
+      const rings = new Array(N).fill(0);
+      const titleYears = entries.map(() => []);
+      let fieldYears = 0;
+      for (let y = 0; y < years; y++) {
+        const seeds = entries
+          .map((en, i) => ({ i, s: yearStrength[i][y], c: en.profile.clutch, w: adjWins[i][y] }))
+          .sort((a, b) => b.w - a.w);
+        let size = 1;
+        while (size < seeds.length) size *= 2;
+        let cur = ORDERS[size].map((k) => seeds[k - 1] || null);
+        while (cur.length > 1) {
+          const next = [];
+          for (let g = 0; g < cur.length; g += 2) {
+            const A = cur[g], B = cur[g + 1];
+            if (!A || !B) { next.push(A || B); continue; }
+            const aWins = seriesWin(A, B, rnd);
+            if (onSeries) onSeries(aWins ? A.i : B.i, aWins ? B.i : A.i);
+            next.push(aWins ? A : B);
+          }
+          cur = next;
+        }
+        const champ = cur[0];
+        // Beat the room, then beat the league: the Field is the best of the
+        // other franchises — a real contender, tougher some years than others.
+        // Calibrated to the profile-strength scale (superteams ≈68-72, strong
+        // rosters ≈55, weak ≈36): dynasties clear it most years, good-not-great
+        // champs are coin-flippy, weak rooms almost never do.
+        const field = { s: 57 + rnd() * 9, c: 82 };
+        if (seriesWin(champ, field, rnd)) {
+          rings[champ.i]++;
+          titleYears[champ.i].push(y + 1);
+        } else {
+          fieldYears++;
+        }
+      }
+      return { rings, titleYears, fieldYears };
     }
 
-    evals.forEach((e) => {
-      let winsSum = 0, peak = 0, titles = 0;
-      const titleYears = [];
+    // ---- The official timeline (applied to the evals everyone sees) --------
+    const h2h = entries.map(() => entries.map(() => ({ w: 0, l: 0 })));
+    const official = simEra(mulberry32(hashStr("league·" + seedStr)), (wi, li) => {
+      h2h[wi][li].w++;
+      h2h[li][wi].l++;
+    });
+    entries.forEach((en, i) => {
+      const e = en.eval;
+      const mine = new Set(official.titleYears[i]);
+      let winsSum = 0, peak = 0;
       e.seasons.forEach((s, y) => {
+        s.wins = adjWins[i][y];
+        s.title = mine.has(y + 1);
         winsSum += s.wins;
         peak = Math.max(peak, s.wins);
-        if (s.title) { titles++; titleYears.push(y + 1); }
       });
       e.avgWins = winsSum / years;
       e.avgRecord = `${e.avgWins.toFixed(1)}-${(82 - e.avgWins).toFixed(1)}`;
       e.peakWins = Math.round(peak);
       e.bestRecord = `${e.peakWins}-${82 - e.peakWins}`;
-      e.championships = titles;
-      e.titleYears = titleYears;
-      // Same blend as evaluateRoster, with rings actually WON leading the title
-      // term (expected titles temper pure luck).
+      e.championships = official.rings[i];
+      e.titleYears = official.titleYears[i];
+      e._h2h = h2h[i];
+      e._idx = i;
       e.composite =
-        (e.avgWins * 0.55 + e.avgPlayoffIndex * 0.5 + (titles * 3.2 + e.titlesExpected * 1.3) + peak * 0.25) *
+        (e.avgWins * 0.55 + e.avgPlayoffIndex * 0.5 +
+          (e.championships * 3.2 + e.titlesExpected * 1.3) + peak * 0.25) *
         (e._mults || 1);
     });
+
+    // ---- Monte Carlo: who built the team most likely to win ANY era? -------
+    const expRings = new Array(N).fill(0);
+    const mostShare = new Array(N).fill(0);
+    let fieldY = 0;
+    for (let k = 0; k < runs; k++) {
+      const r = simEra(mulberry32(hashStr("mc·" + seedStr + "·" + k)), null);
+      r.rings.forEach((t, i) => (expRings[i] += t));
+      fieldY += r.fieldYears;
+      const mx = Math.max.apply(null, r.rings);
+      const tops = [];
+      r.rings.forEach((t, i) => { if (t === mx) tops.push(i); });
+      tops.forEach((i) => (mostShare[i] += 1 / tops.length));
+    }
+    return {
+      expRings: expRings.map((x) => x / runs),
+      mostPct: mostShare.map((x) => Math.round((100 * x) / runs)),
+      fieldPct: Math.round((100 * fieldY) / (runs * years)),
+      runs,
+    };
   }
 
   const POSTSEASON = { mulberry32, hashStr, teamProfile, simSeries, simBracket, seriesWinPct, LEGEND_SQUADS, legendRoster, leagueSim };
