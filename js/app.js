@@ -552,6 +552,12 @@
     return m && m.id === ui.mySeat;
   }
 
+  // Remember who you are: the seat-1 name from your last game auto-fills.
+  const NAME_KEY = "nbaredraft_name";
+  const savedName = () => {
+    try { return localStorage.getItem(NAME_KEY) || ""; } catch (e) { return ""; }
+  };
+
   function renderManagerNameInputs() {
     const n = parseInt($("#num-managers").value, 10);
     const wrap = $("#manager-names");
@@ -573,7 +579,7 @@
       const inp = el("input");
       inp.type = "text";
       inp.placeholder = prevCpu[i] ? `CPU ${i + 1}` : `Manager ${i + 1}`;
-      inp.value = prevName[i] || "";
+      inp.value = prevName[i] || (i === 0 && !prevCpu[i] ? savedName() : "");
       row.appendChild(inp);
 
       // CPU seats are available in both local and online drafts.
@@ -633,6 +639,13 @@
     _dailySet = null; // recompute for this game's seed
     const eraErr = validateEraPool(names.length);
     if (eraErr) return alert(eraErr);
+
+    // Remember the seat-1 human's name for next time.
+    try {
+      const cb0 = rows[0] && rows[0].querySelector('input[type="checkbox"]');
+      const nm0 = (names[0] || "").trim();
+      if (nm0 && !(cb0 && cb0.checked)) localStorage.setItem(NAME_KEY, nm0);
+    } catch (e) {}
 
     // CPU flags from the per-seat toggles (available in local AND online).
     const cpuFlags = rows.map((r) => {
