@@ -918,7 +918,7 @@ select:focus, input:focus { border-color: var(--accent-2); }
 .mute-btn:hover { border-color: var(--accent-2); }
 
 /* ---------------- Quick Start presets ---------------- */
-.presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+.presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
 @media (max-width: 880px) { .presets { grid-template-columns: repeat(2, 1fr); } }
 .preset {
   cursor: pointer; font-family: inherit; text-align: left;

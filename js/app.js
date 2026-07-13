@@ -252,6 +252,7 @@
 
     // Quick Start presets: fill the whole form in one tap (still tweakable).
     const PRESETS = {
+      rishi:   { mode: "local", n: 6, clock: "60", order: "auction", pos: "locked", pace: "fast", coach: false, cap: true, capAmt: "200", chal: "none", bench: "2", cpus: [1, 2, 3, 4, 5] },
       classic: { mode: "local", n: 4, clock: "60", order: "snake", pos: "locked", pace: "fast", coach: false, cap: false, chal: "none", bench: "0", cpus: [] },
       auction: { mode: "local", n: 4, clock: "60", order: "auction", pos: "locked", pace: "fast", coach: false, cap: true, capAmt: "200", chal: "none", bench: "0", cpus: [1, 2, 3] },
       daily:   { mode: "local", n: 4, clock: "60", order: "snake", pos: "locked", pace: "fast", coach: false, cap: false, chal: "daily60", bench: "0", cpus: [1, 2, 3] },
@@ -290,9 +291,11 @@
     }
     $("#preset-row").querySelectorAll(".preset").forEach((b) => {
       // real DOM: dataset; harness: fall back to matching by html
-      b._preset = (b.dataset && b.dataset.preset) || ((b.innerHTML.match(/Classic/) && "classic") || (b.innerHTML.match(/Auction/) && "auction") || (b.innerHTML.match(/Daily/) && "daily") || "quick");
+      b._preset = (b.dataset && b.dataset.preset) || ((b.innerHTML.match(/Rishi/) && "rishi") || (b.innerHTML.match(/Classic/) && "classic") || (b.innerHTML.match(/Auction/) && "auction") || (b.innerHTML.match(/Daily/) && "daily") || "quick");
       b.addEventListener("click", () => applyPreset(b._preset));
     });
+    // "Rishi Style" is the house default — the form opens ready to go.
+    applyPreset("rishi");
 
     // Condense the sticky draft header while scrolling DOWN the player list
     // (the status/ticker rows tuck away); any scroll up brings them back.
