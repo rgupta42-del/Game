@@ -93,10 +93,13 @@ class DraftGame {
     return this.order.length;
   }
 
-  /** Is this manager's roster fully assembled (starters + coach if enabled)? */
+  /** Is this manager's roster fully assembled (starters + coach if enabled)?
+   *  Auctions also require the bench filled — bench spots are lots to win. */
   rosterComplete(m) {
     return (
-      STARTER_SLOTS.every((s) => m.starters[s]) && (!this.coachMode || !!m.coach)
+      STARTER_SLOTS.every((s) => m.starters[s]) &&
+      (!this.coachMode || !!m.coach) &&
+      (!this.auction || m.bench.length >= this.benchSize)
     );
   }
 
@@ -149,10 +152,14 @@ class DraftGame {
     return STARTER_SLOTS.filter((s) => !manager.starters[s]);
   }
 
-  /** All required slots a manager still owes (starters + coach), for the banner. */
+  /** All required slots a manager still owes (starters + coach; in auctions
+   *  bench spots too — they must be won like any other lot). */
   unfilledRequiredSlots(manager) {
     const slots = this.unfilledStarterSlots(manager);
     if (this.needsCoach(manager)) slots.push("COACH");
+    if (this.auction) {
+      for (let i = manager.bench.length; i < this.benchSize; i++) slots.push("BENCH");
+    }
     return slots;
   }
 
@@ -220,7 +227,7 @@ class DraftGame {
       }
     }
     // Bench is open in flexible mode too (any player can sit).
-    if (manager.bench.length < this.benchSize && !this.mustFillStarter(manager)) {
+    if (manager.bench.length < this.benchSize && (this.auction || !this.mustFillStarter(manager))) {
       out.push("BENCH");
     }
     return out;
@@ -247,7 +254,9 @@ class DraftGame {
     const slots = [...eligibleStarterSlots];
 
     const benchHasRoom = manager.bench.length < this.benchSize;
-    if (benchHasRoom && !this.mustFillStarter(manager)) {
+    // In auctions the bench is itself a required slot, so mustFillStarter
+    // (which is trivially true there) must not block it.
+    if (benchHasRoom && (this.auction || !this.mustFillStarter(manager))) {
       slots.push("BENCH");
     }
     return slots;
@@ -307,7 +316,7 @@ class DraftGame {
     const benchRoom = manager.bench.length < this.benchSize;
     const fiveFull = this._starterList(manager).length >= STARTER_SLOTS.length;
     // Explicit bench pick — or the five are set, so the bench is all that's left.
-    if ((preferSlot === "BENCH" && benchRoom && !this.mustFillStarter(manager)) || (fiveFull && benchRoom)) {
+    if ((preferSlot === "BENCH" && benchRoom && (this.auction || !this.mustFillStarter(manager))) || (fiveFull && benchRoom)) {
       manager.bench.push(player);
       return this._record(manager, player, "BENCH");
     }

@@ -617,7 +617,6 @@
     ui.auctionMode = orderSel === "auction";
     ui.orderMode = ["snake", "linear", "random"].includes(orderSel) ? orderSel : "linear";
     if (ui.auctionMode) {
-      ui.benchSize = 0; // auctions fill the five + coach only
       ui.capMode = true; // auctions REQUIRE a salary cap
       if (!ui.capChoice) ui.capChoice = ui.coachMode ? 250 : 200;
       if (online && !liveAvailable()) {
@@ -1199,6 +1198,12 @@
         ? `<span class="ms-slot filled" title="${p.name}">${s}</span>`
         : `<span class="ms-slot open">${s}</span>`;
     }).join("");
+    const benchPills = Array.from({ length: ui.benchSize }, (_, i) => {
+      const bp = (m.bench || [])[i];
+      return bp
+        ? `<span class="ms-slot filled" title="${bp.name}">B${i + 1}</span>`
+        : `<span class="ms-slot open">B${i + 1}</span>`;
+    }).join("");
     const coachPill = ui.coachMode
       ? (m.coach ? `<span class="ms-slot filled" title="${m.coach.name}">🧠</span>`
                  : `<span class="ms-slot open">🧠</span>`)
@@ -1214,7 +1219,7 @@
     }
     box.innerHTML =
       `<span class="ms-team">${m.id === (ui.mySeat) || (!ui.live && !m.isCpu) ? "You" : m.name}</span>` +
-      `<span class="ms-slots">${slotPills}${coachPill}</span>${money}`;
+      `<span class="ms-slots">${slotPills}${benchPills}${coachPill}</span>${money}`;
     box.classList.remove("hidden");
   }
 
@@ -1310,9 +1315,9 @@
   //      even costs, surplus money chases the best players left instead of
   //      stranding (so late bargains get contested, not gifted).
   const AUCTION_PLANS = {
-    stars:    [0.48, 0.22, 0.13, 0.10, 0.07, 0.05], // top-heavy: two studs + depth
-    standard: [0.40, 0.24, 0.15, 0.12, 0.09, 0.06],
-    balanced: [0.30, 0.24, 0.19, 0.15, 0.12, 0.08], // spread it around
+    stars:    [0.48, 0.22, 0.13, 0.10, 0.07, 0.05, 0.04, 0.03], // top-heavy: two studs + depth
+    standard: [0.40, 0.24, 0.15, 0.12, 0.09, 0.06, 0.05, 0.04],
+    balanced: [0.30, 0.24, 0.19, 0.15, 0.12, 0.08, 0.06, 0.05], // spread it around
   };
   function cpuPlanFor(m) {
     const style = (cpuProfiles[m.id] || {}).style || "best";
@@ -1323,10 +1328,11 @@
   /** Top-k values still on the board that this manager could actually use. */
   function cpuMarketTopK(m, k) {
     const open = new Set(game.unfilledStarterSlots(m));
+    const benchOpen = (m.bench || []).length < game.benchSize; // bench takes anyone
     const vals = [];
     for (const p of PLAYER_POOL) {
       if (!game.isAvailable(p.id) || !poolAllowed(p)) continue;
-      if (!p.eligible.some((s) => open.has(s))) continue;
+      if (!benchOpen && !p.eligible.some((s) => open.has(s))) continue;
       vals.push(proposedValue(p));
     }
     if (game.needsCoach(m) && typeof COACH_POOL !== "undefined") {
@@ -1562,15 +1568,16 @@
       game.draft(p, slot, { forId: winner.id, price });
       renderDraft();
     };
-    const slots = game.legalSlotsFor(winner, p).filter((s) => s !== "BENCH");
+    const slots = game.legalSlotsFor(winner, p); // may include BENCH (auction bench)
     // Human winner on THIS device + locked positions + a real choice → let them
     // pick which slot the player fills. (Flexible auto-arranges; CPUs auto-slot.)
     const humanHere = !winner.isCpu && (!ui.live || winner.id === ui.mySeat);
     if (!p.isCoach && game.posMode === "locked" && humanHere && slots.length > 1) {
-      openSlotChoice(p, `${winner.name} won ${p.name} for $${price} — choose a starting slot.`, slots, finalize);
+      openSlotChoice(p, `${winner.name} won ${p.name} for $${price} — choose a slot.`, slots, finalize);
       return;
     }
-    finalize(p.isCoach ? "COACH" : slots.includes(p.pos) ? p.pos : slots[0]);
+    const starters = slots.filter((s) => s !== "BENCH");
+    finalize(p.isCoach ? "COACH" : starters.includes(p.pos) ? p.pos : starters[0] || "BENCH");
   }
 
   /** Generic slot-choice modal that runs a callback with the chosen slot. */
@@ -1715,8 +1722,9 @@
     const p = findDraftable(a.pid);
     const winner = game.managers[a.leaderId];
     if (!p || !winner) return;
-    const slots = game.legalSlotsFor(winner, p).filter((s) => s !== "BENCH");
-    const slot = p.isCoach ? "COACH" : slots.includes(p.pos) ? p.pos : slots[0];
+    const slots = game.legalSlotsFor(winner, p);
+    const starters = slots.filter((s) => s !== "BENCH");
+    const slot = p.isCoach ? "COACH" : starters.includes(p.pos) ? p.pos : starters[0] || "BENCH";
     // The transaction guarantees exactly one device commits the sale.
     FBSync.appendPickIf(ui.roomId, game.pickLog.length, [a.pid, slot, a.bid, a.leaderId]).then(
       (committed) => { if (committed) FBSync.clearAuction(ui.roomId); }
@@ -3203,6 +3211,7 @@
           ? `<div class="res-slot"><span class="res-pos">B${bi + 1}</span>
                <span class="mini-cell">${miniPhotoHtml(bp)}</span>
                <span class="res-pname">${tierBadge(bp)} ${bp.name}</span>
+               ${priceTag(bp.id)}
                ${_gradeById && _gradeById.get(bp.id) ? `<span class="res-grade">${_gradeById.get(bp.id)}</span>` : ""}
                <span class="res-ptag">bench</span>
                <span class="res-prate">${careerRating(bp)}</span></div>`
