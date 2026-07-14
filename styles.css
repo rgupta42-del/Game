@@ -751,8 +751,21 @@ select:focus, input:focus { border-color: var(--accent-2); }
 @media (max-width: 720px) { .res-cols { grid-template-columns: 1fr; } }
 .res-rostercard, .res-swcard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
 .res-rostercard .res-subhead, .res-swcard .res-subhead { margin-top: 0; }
-.res-slot { display: grid; grid-template-columns: 34px 30px minmax(0, 1fr) auto auto auto auto; gap: 8px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.res-slot { display: grid; grid-template-columns: 34px 30px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); }
 .res-price { font-size: 12px; font-weight: 800; color: var(--good); white-space: nowrap; }
+.res-slot.expandable { cursor: pointer; }
+.res-slot.expandable:hover .res-pname { color: var(--accent-2); }
+.res-caret { font-style: normal; font-size: 10px; color: var(--muted); display: inline-block; transition: transform 0.15s ease; }
+.res-slot.open .res-caret { transform: rotate(90deg); }
+.res-slot-detail { border-bottom: 1px solid var(--line); padding: 2px 4px 10px 72px; }
+.res-slot-detail .pd-facts { margin-bottom: 0; }
+.res-wgw { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.res-wgw .res-subhead { margin-top: 0; }
+.podium-card.clickable { cursor: pointer; transition: transform 0.1s ease, border-color 0.1s ease; }
+.podium-card.clickable:hover { transform: translateY(-2px); border-color: var(--accent-2); }
+.nom-custom { display: flex; gap: 8px; align-items: center; flex: 1 1 100%; }
+.nom-custom input { flex: 0 0 80px; }
+.nom-custom .btn { flex: 1; }
 .res-slot:last-child { border-bottom: none; }
 .res-slot.empty { opacity: 0.55; }
 .res-pos { font-weight: 800; color: var(--accent-2); }

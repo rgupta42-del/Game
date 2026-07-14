@@ -1462,20 +1462,25 @@
     return own;
   }
 
-  function openAuction(player) {
+  function openAuction(player, opening) {
     if (ui.auction) return;
     const nom = game.currentManager();
     const bidders = eligibleBidders(player);
     if (!bidders.length) return;
     const opener = nom && canBid(nom, player) ? nom : bidders[0];
+    // A custom opening bid is the NOMINATOR's own first bid (they're on the
+    // hook at that price) — it can't be set on someone else's behalf.
+    const startBid = opener === nom && opening
+      ? Math.max(1, Math.min(Math.floor(opening), Math.max(1, maxBid(opener))))
+      : 1;
     if (ui.live) {
       // The room record is the single source of truth; everyone (including us)
       // picks the lot up from the room echo.
-      FBSync.setAuction(ui.roomId, { pid: player.id, bid: 1, leaderId: opener.id, ts: Date.now() });
+      FBSync.setAuction(ui.roomId, { pid: player.id, bid: startBid, leaderId: opener.id, ts: Date.now() });
       return;
     }
     stopClock(); // the nomination timer ends when the lot opens — the hammer clock takes over
-    ui.auction = { pid: player.id, bid: 1, leaderId: opener.id, gen: ui.gameGen, vals: {}, deadline: auctionGrace(), timer: null };
+    ui.auction = { pid: player.id, bid: startBid, leaderId: opener.id, gen: ui.gameGen, vals: {}, deadline: auctionGrace(), timer: null };
     armAuctionClock();
     if (ui.auction) scheduleAuctionCpus();
     if (ui.auction) {
@@ -1594,6 +1599,39 @@
     }
     const starters = slots.filter((s) => s !== "BENCH");
     finalize(p.isCoach ? "COACH" : starters.includes(p.pos) ? p.pos : starters[0] || "BENCH");
+  }
+
+  /** Nomination modal: pick your opening bid before the lot goes live. */
+  function openNominateModal(player) {
+    const m = game.currentManager();
+    const capBid = Math.max(1, maxBid(m));
+    $("#slot-modal-title").textContent = `Nominate ${player.name}`;
+    $("#slot-modal-sub").textContent =
+      `Choose YOUR opening bid (up to $${capBid}) — you lead the lot at that price. ` +
+      `Opening high scares off shallow pockets.`;
+    const wrap = $("#slot-options");
+    wrap.innerHTML = "";
+    const half = Math.max(1, Math.round(proposedValue(player) / 2));
+    const quicks = [...new Set([1, 5, 10, half].filter((v) => v >= 1 && v <= capBid))].sort((a, b) => a - b);
+    quicks.forEach((v) => {
+      const o = el("div", "so", `$${v}`);
+      o.onclick = () => { closeModal(); openAuction(player, v); };
+      wrap.appendChild(o);
+    });
+    const row = el("div", "nom-custom");
+    const inp = el("input", "au-amt");
+    inp.type = "text";
+    inp.placeholder = "$";
+    row.appendChild(inp);
+    const go = el("button", "btn primary mini", "Open bidding 🔨");
+    go.onclick = () => {
+      const v = parseInt(inp.value, 10);
+      closeModal();
+      openAuction(player, Math.max(1, Math.min(isNaN(v) ? 1 : v, capBid)));
+    };
+    row.appendChild(go);
+    wrap.appendChild(row);
+    $("#slot-modal").classList.remove("hidden");
   }
 
   /** Generic slot-choice modal that runs a callback with the chosen slot. */
@@ -2429,9 +2467,16 @@
 
   // ---- Drafting flow -----------------------------------------------------
   function onDraftClick(player) {
-    // Auction: clicking Nominate puts the player on the block.
+    // Auction: clicking Nominate puts the player on the block. Humans choose
+    // their opening bid — opening at your max stops a rival with the same $2
+    // from simply outbidding you to +1.
     if (game.auction) {
-      openAuction(player);
+      const m = game.currentManager();
+      if (m && !m.isCpu && (!ui.live || myTurn()) && canBid(m, player)) {
+        openNominateModal(player);
+      } else {
+        openAuction(player);
+      }
       return;
     }
     const m = game.currentManager();
@@ -3157,8 +3202,16 @@
     wrap.innerHTML = "";
     const medals = ["🥇", "🥈", "🥉"];
     results.forEach((r, i) => {
-      const card = el("div", "podium-card" + (i === 0 ? " rank-1" : ""));
+      const card = el("div", "podium-card clickable" + (i === 0 ? " rank-1" : ""));
       card.style.borderTop = `3px solid ${mgrColor(r.manager.id)}`;
+      card.title = "Jump to this team's full analysis";
+      card.onclick = () => {
+        showResultTeam(results, i);
+        const anchor = $("#results-teamtabs");
+        if (anchor && typeof anchor.scrollIntoView === "function") {
+          anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      };
       const heads = STARTER_SLOTS.map((s) => miniPhotoHtml(r.manager.starters[s])).join("");
       card.innerHTML = `
         <div class="podium-rank">${medals[i] || `#${i + 1}`}</div>
@@ -3206,42 +3259,58 @@
         return e && e.price != null ? `<span class="res-price" title="Hammer price paid">$${e.price}</span>` : "";
       };
 
-      // Clean position-by-position roster (+ coach row when coaches are on).
+      // Clean position-by-position roster: name + price + rating only. Tap a
+      // row to unfold tier, grade, usage, archetype and the rest.
+      const playerRow = (slotKey, p, extraTag) => {
+        const gr = _gradeById && _gradeById.get(p.id);
+        const e = p.ext || {};
+        return `<div class="res-slot expandable">
+            <span class="res-pos">${slotKey}</span>
+            <span class="mini-cell">${miniPhotoHtml(p)}</span>
+            <span class="res-pname">${p.name} <i class="res-caret">▸</i></span>
+            ${priceTag(p.id)}
+            <span class="res-prate">${careerRating(p)}</span>
+          </div>
+          <div class="res-slot-detail hidden"><div class="pd-facts">
+            ${tierBadge(p)}
+            ${gr ? `<span class="res-grade" title="Draft grade">${gr}</span>` : ""}
+            ${extraTag ? `<span class="tag">${extraTag}</span>` : ""}
+            <span class="tag">${SCORING.usageTier(p)}</span>
+            <span class="tag">${p.archetype}</span>
+            <span class="tag">Peak ${peakOverall(p)}</span>
+            <span class="tag">Clutch ${e.clutch != null ? e.clutch : "—"}</span>
+            <span class="tag">Injury ${p.injuryRisk}</span>
+            <span class="tag">Eras ${(p.eras || []).join("/")}</span>
+          </div></div>`;
+      };
+      const emptyRow = (slotKey, label) =>
+        `<div class="res-slot empty"><span class="res-pos">${slotKey}</span><span class="mini-cell"></span><span class="res-pname">${label}</span></div>`;
+
       let rosterRows = STARTER_SLOTS.map((slot) => {
         const p = m.starters[slot];
-        if (!p) return `<div class="res-slot empty"><span class="res-pos">${slot}</span><span class="mini-cell"></span><span class="res-pname">— empty —</span></div>`;
-        const gr = _gradeById && _gradeById.get(p.id);
-        return `<div class="res-slot">
-            <span class="res-pos">${slot}</span>
-            <span class="mini-cell">${miniPhotoHtml(p)}</span>
-            <span class="res-pname">${tierBadge(p)} ${p.name}</span>
-            ${priceTag(p.id)}
-            ${gr ? `<span class="res-grade">${gr}</span>` : ""}
-            <span class="res-ptag">${SCORING.usageTier(p)}</span>
-            <span class="res-prate">${careerRating(p)}</span>
-          </div>`;
+        return p ? playerRow(slot, p) : emptyRow(slot, "— empty —");
       }).join("");
       for (let bi = 0; bi < ui.benchSize; bi++) {
         const bp = (m.bench || [])[bi];
-        rosterRows += bp
-          ? `<div class="res-slot"><span class="res-pos">B${bi + 1}</span>
-               <span class="mini-cell">${miniPhotoHtml(bp)}</span>
-               <span class="res-pname">${tierBadge(bp)} ${bp.name}</span>
-               ${priceTag(bp.id)}
-               ${_gradeById && _gradeById.get(bp.id) ? `<span class="res-grade">${_gradeById.get(bp.id)}</span>` : ""}
-               <span class="res-ptag">bench</span>
-               <span class="res-prate">${careerRating(bp)}</span></div>`
-          : `<div class="res-slot empty"><span class="res-pos">B${bi + 1}</span><span class="mini-cell"></span><span class="res-pname">— empty —</span></div>`;
+        rosterRows += bp ? playerRow("B" + (bi + 1), bp, "bench") : emptyRow("B" + (bi + 1), "— empty —");
       }
       if (ui.coachMode) {
-        rosterRows += m.coach
-          ? `<div class="res-slot coach"><span class="res-pos">🧠</span>
-               <span class="mini-cell">${miniPhotoHtml(m.coach)}</span>
-               <span class="res-pname">${m.coach.name}</span>
-               ${priceTag(m.coach.id)}
-               <span class="res-ptag">${m.coach.style}</span>
-               <span class="res-prate">${m.coach.overall}</span></div>`
-          : `<div class="res-slot empty"><span class="res-pos">🧠</span><span class="mini-cell"></span><span class="res-pname">— no coach —</span></div>`;
+        const co = m.coach;
+        rosterRows += co
+          ? `<div class="res-slot coach expandable">
+               <span class="res-pos">🧠</span>
+               <span class="mini-cell">${miniPhotoHtml(co)}</span>
+               <span class="res-pname">${co.name} <i class="res-caret">▸</i></span>
+               ${priceTag(co.id)}
+               <span class="res-prate">${co.overall}</span>
+             </div>
+             <div class="res-slot-detail hidden"><div class="pd-facts">
+               <span class="tag pos">${co.style}</span>
+               <span class="tag">Off ${co.traits.off}</span>
+               <span class="tag">Def ${co.traits.def}</span>
+               <span class="tag">Pace ${co.traits.pace}</span>
+             </div></div>`
+          : emptyRow("🧠", "— no coach —");
       }
 
       // Strengths & weaknesses.
@@ -3389,6 +3458,56 @@
         muHtml = fold("⚔️ Rival matchups — your best-of-7 odds", rows);
       }
 
+      // "What went right / what went wrong" — a short era verdict explaining
+      // the rings won (or the parade that never came).
+      const verdict = (() => {
+        const right = [], wrong = [];
+        const clutchAvg = stAll.length ? stAll.reduce((s2, p) => s2 + ((p.ext && p.ext.clutch) || 70), 0) / stAll.length : 70;
+        const rings = ev.championships;
+        const exp = ui._mc && ev._idx != null ? ui._mc.expRings[ev._idx] : null;
+        const entries2 = ui._era && ui._era.entries;
+        let nemesis = null, victim = null;
+        if (entries2 && ev._h2h) {
+          ev._h2h.forEach((rec, j) => {
+            if (j === ev._idx) return;
+            if (!nemesis || rec.l > nemesis.l) nemesis = { w: rec.w, l: rec.l, name: entries2[j].manager.name };
+            if (!victim || rec.w > victim.w) victim = { w: rec.w, l: rec.l, name: entries2[j].manager.name };
+          });
+        }
+        if (rings) {
+          right.push(`Won ${rings} ring${rings === 1 ? "" : "s"} — the ${sw.strengths[0] || "balanced construction"} travelled to the playoffs`);
+          if (clutchAvg >= 84) right.push(`Closers everywhere: elite clutch (${Math.round(clutchAvg)}) decided the tight series`);
+        }
+        if (ev.avgWins >= 60) right.push(`A ${ev.avgRecord} regular-season machine — top seeds and home court most years`);
+        if (victim && victim.w >= 2) right.push(`Owned ${victim.name} in the playoffs (${victim.w}-${victim.l} in series)`);
+        if (ringsIn >= 2 && ringsIn === ev.championships) right.push(`Peaked together — every ring landed inside the title window`);
+        if (exp != null && rings > 0 && rings >= exp + 0.8) right.push(`Over-delivered: ${rings} rings vs ${exp.toFixed(1)} expected — health and timing broke their way`);
+
+        if (!rings) {
+          wrong.push(ev.avgPlayoffIndex >= 55
+            ? "Deep runs, no parade — never sealed the last series"
+            : `The postseason ceiling was "${playoffLabel(ev.avgPlayoffIndex)}" — this build wasn't made for May`);
+        }
+        if (nemesis && nemesis.l >= 2) wrong.push(`${nemesis.name} was the wall — lost ${nemesis.l} playoff series to them`);
+        if (clutchAvg <= 74) wrong.push(`No closer: clutch ${Math.round(clutchAvg)} shrank in the biggest moments`);
+        const injN = (ev.advLog || []).filter((x) => x.kind === "bad" && /injur/i.test(x.text)).length;
+        if (injN >= 2) wrong.push(`Injuries kept interrupting — ${injN} major absences over the run`);
+        if ((ev.advLog || []).some((x) => x.kind === "bad" && /locker-room/.test(x.text))) wrong.push("Locker-room drama burned a stretch of prime seasons");
+        if (exp != null && rings + 0.8 < exp) wrong.push(`Under-delivered: ${exp.toFixed(1)} rings expected, won ${rings} — the breaks went the other way`);
+        if (sw.weaknesses.length && wrong.length < 3) wrong.push(`${cap(sw.weaknesses[0])} was exploitable every spring`);
+        if (!wrong.length) wrong.push("Honestly? Not much — this era belonged to them");
+        if (!right.length) right.push(ev.avgWins >= 50 ? `Stayed competitive (${ev.avgRecord} avg) in a brutal room` : "The lottery odds beat the construction — a rebuild era");
+        return { right: right.slice(0, 4), wrong: wrong.slice(0, 4) };
+      })();
+      const wgwHtml = `
+        <div class="res-wgw">
+          <div class="res-subhead">The verdict — what went right &amp; what went wrong</div>
+          <div class="res-sw">
+            <div><div class="sw-head good">What went right</div><ul>${verdict.right.map((t) => `<li class="good">${t}</li>`).join("")}</ul></div>
+            <div><div class="sw-head bad">What went wrong</div><ul>${verdict.wrong.map((t) => `<li class="bad">${t}</li>`).join("")}</ul></div>
+          </div>
+        </div>`;
+
       // One line that makes the ranking self-explanatory: rings first, then
       // the era-quality facts behind the composite tiebreak.
       const whyBits = [
@@ -3426,12 +3545,22 @@
             ${clutchLine}
           </div>
         </div>
+        ${wgwHtml}
         ${muHtml}
         ${advHtml}
         ${synHtml}
         ${effHtml}
         ${narrativeHtml}
         ${fold("📈 15-year win trajectory", `<div class="timeline">${bars}</div>${tlLegend}`)}`;
+
+      // Tap a roster row to unfold the player's detail strip.
+      team.querySelectorAll(".res-slot.expandable").forEach((rowEl) => {
+        rowEl.addEventListener("click", () => {
+          rowEl.classList.toggle("open");
+          const det = rowEl.nextElementSibling;
+          if (det && det.classList && det.classList.contains("res-slot-detail")) det.classList.toggle("hidden");
+        });
+      });
       return team;
     }
   }
