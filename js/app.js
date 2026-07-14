@@ -1601,16 +1601,27 @@
     finalize(p.isCoach ? "COACH" : starters.includes(p.pos) ? p.pos : starters[0] || "BENCH");
   }
 
-  /** Nomination modal: pick your opening bid before the lot goes live. */
+  /** Nomination modal: pick your opening bid before the lot goes live. Also
+   *  the nomination CONFIRMATION — Cancel backs out, so no arming tap needed. */
   function openNominateModal(player) {
     const m = game.currentManager();
+    const iCanBid = canBid(m, player);
     const capBid = Math.max(1, maxBid(m));
     $("#slot-modal-title").textContent = `Nominate ${player.name}`;
-    $("#slot-modal-sub").textContent =
-      `Choose YOUR opening bid (up to $${capBid}) — you lead the lot at that price. ` +
-      `Opening high scares off shallow pockets.`;
+    $("#slot-modal-sub").textContent = iCanBid
+      ? `Choose YOUR opening bid (up to $${capBid}) — you lead the lot at that price. ` +
+        `Opening high scares off shallow pockets.`
+      : `You can't bid on ${player.name} (no open slot or no budget) — this puts them ` +
+        `on the block at $1 for the room to fight over.`;
     const wrap = $("#slot-options");
     wrap.innerHTML = "";
+    if (!iCanBid) {
+      const o = el("div", "so", "🔨 Open at $1");
+      o.onclick = () => { closeModal(); openAuction(player); };
+      wrap.appendChild(o);
+      $("#slot-modal").classList.remove("hidden");
+      return;
+    }
     const half = Math.max(1, Math.round(proposedValue(player) / 2));
     const quicks = [...new Set([1, 5, 10, half].filter((v) => v >= 1 && v <= capBid))].sort((a, b) => a - b);
     quicks.forEach((v) => {
@@ -2382,9 +2393,11 @@
         const btn = el("button", "btn primary mini", label);
         // Touch screens: first tap arms, second confirms — a slim row is too
         // easy to fat-finger for a pick to commit on one tap. Mouse pointers
-        // (and bids, which must stay fast) keep single-click.
+        // (and bids, which must stay fast) keep single-click. Auction
+        // nominations skip the arming: the opening-bid modal (with Cancel)
+        // IS the confirmation.
         btn.onclick = () => {
-          if (touchConfirm() && !btn._armed) {
+          if (!game.auction && touchConfirm() && !btn._armed) {
             btn._armed = true;
             btn.textContent = "Confirm ✓";
             btn.classList.add("confirming");
@@ -2472,8 +2485,8 @@
     // from simply outbidding you to +1.
     if (game.auction) {
       const m = game.currentManager();
-      if (m && !m.isCpu && (!ui.live || myTurn()) && canBid(m, player)) {
-        openNominateModal(player);
+      if (m && !m.isCpu && (!ui.live || myTurn())) {
+        openNominateModal(player); // the modal (with Cancel) is the confirmation
       } else {
         openAuction(player);
       }

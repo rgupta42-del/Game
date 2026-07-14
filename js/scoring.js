@@ -858,12 +858,21 @@ function strengthToWins(strength) {
 
 /**
  * How well a player suits the slot they're being asked to play. Full value at
- * their natural position, a small haircut at a secondary-eligible spot.
+ * their natural position; at a secondary-eligible spot the haircut depends on
+ * whether their skills actually carry the job — Duncan (elite interior D +
+ * boards) slides to C almost seamlessly, a stretch-four does not.
  */
 function positionMultiplier(player, slot) {
   if (player.pos === slot) return 1.0;
-  if (player.eligible.includes(slot)) return 0.975;
-  return 0.94;
+  if (!player.eligible.includes(slot)) return 0.92;
+  const r = player.ratings;
+  let carry = 0.5;
+  if (slot === "C") carry = clamp((r.interiorD - 68 + (r.rebounding - 68)) / 40, 0, 1); // anchor duty
+  else if (slot === "PF") carry = clamp((r.rebounding - 62 + (r.shooting - 55)) / 44, 0, 1); // glass + stretch
+  else if (slot === "SF") carry = clamp((r.perimeterD - 62 + (r.shooting - 58)) / 44, 0, 1); // wing duty
+  else if (slot === "SG") carry = clamp((r.shooting - 60 + (r.perimeterD - 60)) / 44, 0, 1);
+  else if (slot === "PG") carry = clamp((r.playmaking - 62) / 22, 0, 1); // someone must initiate
+  return 0.955 + 0.035 * carry; // 0.955 awkward fit .. 0.99 seamless slide
 }
 
 /**
@@ -895,10 +904,12 @@ function lineupConstruction(roster) {
 function rosterContext(roster) {
   const starters = [];
   const posMult = [];
+  const slots = []; // the slot each starter occupies (parallel to `starters`)
   for (const pos of POSITIONS) {
     const p = roster.starters[pos];
     if (!p) continue;
     starters.push(p);
+    slots.push(pos);
     posMult.push(positionMultiplier(p, pos));
   }
   const filled = starters.length;
@@ -906,7 +917,7 @@ function rosterContext(roster) {
   const bench = roster.bench ? roster.bench.filter(Boolean) : [];
 
   if (filled === 0) {
-    return { starters, posMult, bench, filled, completeness, chemistry: 0, construction: 0,
+    return { starters, posMult, slots, bench, filled, completeness, chemistry: 0, construction: 0,
       fitDelta: 0, efficiencyDelta: 0, elevateBoost: 0, avgWinning: 0, avgClutch: 0, alphaBoost: 0 };
   }
 
@@ -928,7 +939,7 @@ function rosterContext(roster) {
   const alphaBoost = Math.max(0, maxDom - 86) * 0.25;
 
   return {
-    starters, posMult, bench, filled, completeness, chemistry, construction, fitDelta, efficiencyDelta,
+    starters, posMult, slots, bench, filled, completeness, chemistry, construction, fitDelta, efficiencyDelta,
     elevateBoost: (avgElevates - 70) * 0.06, avgWinning, avgClutch, alphaBoost,
   };
 }
@@ -938,9 +949,12 @@ function projectSeason(ctx, t) {
   if (ctx.filled === 0) return { wins: 15, playoffIndex: 0, titleProb: 0, avgStarterValue: 0, chemistry: 0 };
 
   // Per-starter season value (position-adjusted). Bench can cover a faded
-  // starter if it ever has anyone (benchSize is 0 in the live game).
-  const benchVals = ctx.bench.length
-    ? ctx.bench.map((p) => effectiveSeasonValue(p, t)).sort((a, b) => b - a)
+  // starter — but the sub is judged AT THE INJURED SLOT (a wing backing up
+  // your center covers far less than a real big would).
+  const benchC = ctx.bench.length
+    ? ctx.bench
+        .map((p) => ({ p, v: effectiveSeasonValue(p, t) }))
+        .sort((a, b) => b.v - a.v)
     : null;
   let benchPtr = 0;
 
@@ -948,7 +962,11 @@ function projectSeason(ctx, t) {
   let sum = 0;
   for (let i = 0; i < ctx.filled; i++) {
     let v = effectiveSeasonValue(ctx.starters[i], t) * ctx.posMult[i];
-    if (benchVals && benchPtr < benchVals.length && benchVals[benchPtr] > v) v = benchVals[benchPtr++];
+    if (benchC && benchPtr < benchC.length) {
+      const sub = benchC[benchPtr];
+      const subV = sub.v * positionMultiplier(sub.p, ctx.slots[i]);
+      if (subV > v) { v = subV; benchPtr++; }
+    }
     vals[i] = v;
     sum += v;
   }
@@ -1018,15 +1036,34 @@ function adversityPlan(ctx) {
   const events = [];
 
   if (A.inj) {
-    ctx.starters.forEach((p) => {
+    // Bench cover: the best unused bench player steps in for the injured
+    // starter, absorbing up to ~52% of the hit — discounted by how well they
+    // actually fit the injured slot (a real backup big covers your center;
+    // a spare wing doesn't).
+    const benchPool = ctx.bench.slice().sort((a, b) => careerRating(b) - careerRating(a));
+    const benchUsedBySeason = {};
+    ctx.starters.forEach((p, si) => {
+      const slot = ctx.slots[si];
       const perSeason = (p.injuryRisk / 100) * 0.26; // risk 60 → ~2.3 hit seasons
       const stakes = 0.5 + clamp((careerRating(p) - 68) / 28, 0, 1) * 0.8; // stars hurt more
       for (let t = 0; t < PROJECTION_YEARS; t++) {
         if (rnd() < perSeason) {
           const sev = 0.3 + rnd() * 0.6; // fraction of the season lost
-          pens[t] += sev * 8.5 * stakes;
-          if (sev > 0.55) events.push({ y: t + 1, kind: "bad", text: `🩼 Yr ${t + 1}: ${p.name} missed most of the season injured` });
-          else if (sev > 0.4) events.push({ y: t + 1, kind: "bad", text: `🩼 Yr ${t + 1}: ${p.name} missed extended time injured` });
+          let pen = sev * 8.5 * stakes;
+          let coveredBy = null;
+          const used = (benchUsedBySeason[t] = benchUsedBySeason[t] || new Set());
+          const sub = benchPool.find((b) => !used.has(b.id));
+          if (sub) {
+            const cover = clamp(
+              (careerRating(sub) * positionMultiplier(sub, slot)) / Math.max(1, careerRating(p)), 0, 0.95);
+            pen *= 1 - 0.55 * cover;
+            used.add(sub.id);
+            if (cover >= 0.5) coveredBy = sub.name;
+          }
+          pens[t] += pen;
+          const stepIn = coveredBy ? ` — ${coveredBy} stepped in` : "";
+          if (sev > 0.55) events.push({ y: t + 1, kind: "bad", text: `🩼 Yr ${t + 1}: ${p.name} missed most of the season injured${stepIn}` });
+          else if (sev > 0.4) events.push({ y: t + 1, kind: "bad", text: `🩼 Yr ${t + 1}: ${p.name} missed extended time injured${stepIn}` });
         }
       }
     });
@@ -1410,6 +1447,7 @@ const SCORING = {
   evaluateRoster,
   setAdversities,
   rosterResilience,
+  positionMultiplier,
   playoffLabel,
   pickFitGrade,
   analyzeRoster,
