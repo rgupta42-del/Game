@@ -121,6 +121,19 @@ input[type="text"]:focus { border-color: var(--accent); }
 .ticker-label { color: var(--muted); font-size: 14px; }
 .ticker { font-size: 44px; font-weight: 900; color: var(--accent-2); font-variant-numeric: tabular-nums; }
 
+.assist-row { display: flex; gap: 10px; margin-bottom: 12px; }
+.btn.mini {
+  flex: 1; width: auto; padding: 10px 12px; font-size: 14px; font-weight: 700;
+  background: var(--card); border: 1px solid var(--line); color: var(--text);
+}
+.btn.mini:hover:not(:disabled) { border-color: var(--accent); }
+.btn.mini:disabled { opacity: .45; }
+.hint-box {
+  background: rgba(255, 184, 77, .1); border: 1px solid rgba(255, 184, 77, .45);
+  color: var(--warn); border-radius: 12px; padding: 10px 14px;
+  font-size: 14px; line-height: 1.45; margin-bottom: 12px;
+}
+
 .options { display: grid; gap: 10px; }
 .option {
   text-align: left; background: var(--card); border: 1px solid var(--line);
@@ -134,6 +147,12 @@ input[type="text"]:focus { border-color: var(--accent); }
 .option:disabled { cursor: default; opacity: .7; }
 .option.right { border-color: var(--good); background: rgba(47, 213, 115, .12); opacity: 1; }
 .option.wrong { border-color: var(--bad); background: rgba(255, 84, 112, .12); opacity: 1; }
+/* Eliminated decoys fade out but keep their slot, so the remaining buttons
+   don't shift under the player's finger mid-click. */
+.option.eliminated {
+  opacity: 0; pointer-events: none; transform: scale(.96);
+  transition: opacity .45s ease, transform .45s ease;
+}
 
 .reveal { margin-top: 18px; display: grid; grid-template-columns: 84px 1fr; gap: 14px; align-items: center; }
 .reveal-art { width: 84px; height: 84px; border-radius: 12px; object-fit: cover; background: var(--card-2); }

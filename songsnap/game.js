@@ -5,8 +5,10 @@
  * official 30s iTunes preview clips at runtime → each round plays the first
  * 5 seconds of the clip, then a 10-second guess window opens with 5 options.
  * Points: answer in the 1st second = 100, 2nd = 90 … window expires = 0.
- * Wrong answer = 0. Results are shareable and saved to a per-day, on-device
- * leaderboard.
+ * Wrong answer = 0. While the clock runs you can Replay the clip (free) or
+ * take a written Hint (−30 pts, floor 0); at the 5-second mark two wrong
+ * options are eliminated. Results are shareable and saved to a per-day,
+ * on-device leaderboard.
  */
 "use strict";
 (() => {
@@ -15,6 +17,9 @@
   const ROUNDS = 5;
   const OPTIONS = 5;
   const MAX_ROUND_POINTS = 100;
+  const HINT_COST = 30;
+  const ELIMINATE_AT_MS = 5000; // halfway: 2 wrong options vanish
+  const ELIMINATE_COUNT = 2;
   const MAX_PER_CATEGORY = 2; // variety guard for the daily five
   const EPOCH = "2026-07-18"; // game #1
 
@@ -113,6 +118,7 @@
       previewUrl: hit.previewUrl,
       artwork: (hit.artworkUrl100 || "").replace("100x100", "300x300"),
       year: hit.releaseDate ? new Date(hit.releaseDate).getFullYear() : null,
+      album: hit.collectionName || "",
     };
   }
 
@@ -150,6 +156,7 @@
         rr
       ).slice(0, OPTIONS - 1);
       round.options = seededShuffle([round.song, ...decoys], rr);
+      round.eliminate = seededShuffle(decoys, rr).slice(0, ELIMINATE_COUNT);
     });
     return rounds;
   }
@@ -161,7 +168,10 @@
   let results = [];       // [{t, a, art, pts, outcome: "hit"|"miss"|"timeout"}]
   let clipTimer = null;
   let guessTimer = null;
+  let replayTimer = null;
   let guessStart = 0;
+  let hintUsed = false;
+  let eliminated = false;
   let phase = "idle";     // idle | listening | guessing | reveal
 
   const totalScore = () => results.reduce((s, r) => s + r.pts, 0);
@@ -176,7 +186,8 @@
     for (const a of audios) { try { a.pause(); } catch { /* not started */ } }
     clearInterval(clipTimer);
     clearInterval(guessTimer);
-    clipTimer = guessTimer = null;
+    clearInterval(replayTimer);
+    clipTimer = guessTimer = replayTimer = null;
   }
 
   // ── home ────────────────────────────────────────────────────────────────
@@ -269,13 +280,48 @@
   });
 
   function pointsNow(elapsedMs) {
-    return Math.max(0, MAX_ROUND_POINTS - Math.floor(elapsedMs / 1000) * 10);
+    const base = Math.max(0, MAX_ROUND_POINTS - Math.floor(elapsedMs / 1000) * 10);
+    return Math.max(0, base - (hintUsed ? HINT_COST : 0));
+  }
+
+  // A written hint that narrows things down without naming the answer: the
+  // release year plus the album — unless the album is basically the song
+  // title, in which case fall back to the artist's first letter.
+  function hintText(r) {
+    const bits = [];
+    if (r.media.year) bits.push(`released in ${r.media.year}`);
+    const album = r.media.album || "";
+    const nt = norm(r.song.t);
+    const nal = norm(album);
+    if (album && !nal.includes(nt) && !nt.includes(nal)) {
+      bits.push(`from the album “${album}”`);
+    } else {
+      bits.push(`the artist's name starts with “${r.song.a.replace(/^the /i, "")[0].toUpperCase()}”`);
+    }
+    return `💡 This one was ${bits.join(" — ")}.`;
+  }
+
+  function eliminateTwo() {
+    eliminated = true;
+    const r = rounds[current];
+    for (const b of document.querySelectorAll("#options .option")) {
+      const hitIt = r.eliminate.some(
+        (d) => b.querySelector(".opt-title").textContent === d.t &&
+               b.querySelector(".opt-artist").textContent === d.a
+      );
+      if (hitIt) { b.classList.add("eliminated"); b.disabled = true; }
+    }
   }
 
   function startGuess() {
     phase = "guessing";
+    hintUsed = false;
+    eliminated = false;
     $("listen-wrap").hidden = true;
     $("guess-wrap").hidden = false;
+    $("hint-box").hidden = true;
+    $("hint-box").textContent = "";
+    $("hint-btn").disabled = false;
     const r = rounds[current];
     const box = $("options");
     box.innerHTML = "";
@@ -293,15 +339,42 @@
       const ms = performance.now() - guessStart;
       $("guess-bar").style.width = `${Math.max(0, 100 - (ms / (GUESS_SECONDS * 1000)) * 100)}%`;
       $("points-ticker").textContent = pointsNow(ms);
+      if (ms >= ELIMINATE_AT_MS && !eliminated) eliminateTwo();
       if (ms >= GUESS_SECONDS * 1000) answer(null);
     }, 50);
   }
+
+  // Replay the 5-second clip while the clock keeps running; options stay live.
+  $("replay-btn").addEventListener("click", () => {
+    if (phase !== "guessing") return;
+    const a = audios[current];
+    clearInterval(replayTimer);
+    a.currentTime = 0;
+    a.play().catch(() => { /* best-effort */ });
+    replayTimer = setInterval(() => {
+      if (a.currentTime >= CLIP_SECONDS) {
+        clearInterval(replayTimer);
+        replayTimer = null;
+        try { a.pause(); } catch { /* fine */ }
+      }
+    }, 100);
+  });
+
+  $("hint-btn").addEventListener("click", () => {
+    if (phase !== "guessing" || hintUsed) return;
+    hintUsed = true;
+    $("hint-btn").disabled = true;
+    const box = $("hint-box");
+    box.textContent = hintText(rounds[current]);
+    box.hidden = false;
+  });
 
   function answer(opt) {
     if (phase !== "guessing") return;
     phase = "reveal";
     clearInterval(guessTimer);
-    guessTimer = null;
+    clearInterval(replayTimer);
+    guessTimer = replayTimer = null;
     const ms = performance.now() - guessStart;
     const r = rounds[current];
     const correct = opt && opt.t === r.song.t && opt.a === r.song.a;
@@ -328,7 +401,8 @@
     $("reveal-title").textContent = r.song.t;
     $("reveal-artist").textContent = r.song.a + (r.media.year ? ` · ${r.media.year}` : "");
     $("reveal-pts").textContent =
-      outcome === "hit" ? `+${pts} pts` : outcome === "timeout" ? "Time's up! +0" : "Wrong! +0";
+      outcome === "hit" ? `+${pts} pts${hintUsed ? " (hint −30)" : ""}`
+      : outcome === "timeout" ? "Time's up! +0" : "Wrong! +0";
     $("reveal-pts").className = `reveal-pts ${outcome}`;
     $("next-btn").textContent = current === ROUNDS - 1 ? "See results ➜" : "Next round ➜";
     $("reveal-wrap").hidden = false;

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1115">
   <meta name="description" content="SongSnap — hear 5 seconds of a hit, guess it fast. 5 songs a day, 500 points on the line.">
   <title>SongSnap — Daily Song Quiz</title>
-  <link rel="stylesheet" href="styles.css?v=1">
+  <link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body>
   <main class="app">
@@ -22,6 +22,7 @@
         <div class="rule"><span>🎧</span> 5 songs every day — 90s &amp; 00s pop, pop rock, hip hop &amp; today's hits</div>
         <div class="rule"><span>⏱️</span> You hear the first 5 seconds, then get 10 seconds to pick from 5 options</div>
         <div class="rule"><span>⚡</span> Answer in the 1st second for 100 pts, the 2nd for 90… hesitate to 0</div>
+        <div class="rule"><span>🔁</span> Replay the clip free, or take a hint for −30 pts — at halfway, 2 wrong options vanish</div>
         <div class="rule"><span>🏆</span> 500 max — share your score and top the daily leaderboard</div>
       </div>
 
@@ -69,6 +70,11 @@
           <span class="ticker-label">pts</span>
         </div>
         <div class="bar-track"><div id="guess-bar" class="bar guess"></div></div>
+        <div class="assist-row">
+          <button id="replay-btn" class="btn mini">🔁 Replay</button>
+          <button id="hint-btn" class="btn mini">💡 Hint - Lose 30pts</button>
+        </div>
+        <div id="hint-box" class="hint-box" hidden></div>
         <div id="options" class="options"></div>
       </div>
 
@@ -101,7 +107,7 @@
   </main>
   <div id="toast" class="toast"></div>
 
-  <script src="songs.js?v=1"></script>
-  <script src="game.js?v=1"></script>
+  <script src="songs.js?v=2"></script>
+  <script src="game.js?v=2"></script>
 </body>
 </html>
