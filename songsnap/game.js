@@ -46,8 +46,75 @@
     },
   };
   const K_NAME = "songsnap:name";
+  const K_ALIAS = "songsnap:alias";
   const K_PLAYED = `songsnap:played:${todayKey}`;
   const K_BOARD = `songsnap:board:${todayKey}`;
+  const K_POSTED = `songsnap:posted:${todayKey}`;
+
+  // ── shared leaderboard backend (Firebase RTDB REST — same database the
+  // NBA game's live sync uses; /drafts/* is the path its rules leave open,
+  // so SongSnap lives in a namespace under it). The local board remains as
+  // an offline fallback. window.SONGSNAP_DB_BASE is a test hook.
+  const DB_BASE = window.SONGSNAP_DB_BASE ||
+    "https://nba-redraft-b85ce-default-rtdb.firebaseio.com/drafts/songsnap";
+
+  function dbFetch(url, opts = {}, timeoutMs = 8000) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), timeoutMs);
+    return fetch(url, { ...opts, signal: ctl.signal }).finally(() => clearTimeout(t));
+  }
+
+  // Sequential "Player 0001"-style aliases via an atomic counter (ETag
+  // compare-and-swap); random 4-digit fallback if the network fights back.
+  async function claimAlias() {
+    for (let i = 0; i < 4; i++) {
+      const res = await dbFetch(`${DB_BASE}/aliasCounter.json`, {
+        headers: { "X-Firebase-ETag": "true" },
+      });
+      if (!res.ok) break;
+      const etag = res.headers.get("ETag");
+      const n = (await res.json()) || 0;
+      const put = await dbFetch(`${DB_BASE}/aliasCounter.json`, {
+        method: "PUT", headers: { "if-match": etag }, body: JSON.stringify(n + 1),
+      });
+      if (put.ok) return n + 1;
+      if (put.status !== 412) break; // 412 = lost the race — try again
+    }
+    throw new Error("alias counter unavailable");
+  }
+
+  async function ensureName() {
+    const typed = (store.get(K_NAME) || "").trim();
+    if (typed) return typed.slice(0, 20);
+    let alias = store.get(K_ALIAS);
+    if (!alias) {
+      try { alias = `Player ${String(await claimAlias()).padStart(4, "0")}`; }
+      catch { alias = `Player ${1000 + Math.floor(Math.random() * 9000)}`; }
+      store.set(K_ALIAS, alias);
+    }
+    return alias;
+  }
+
+  async function postScore(name, score) {
+    const res = await dbFetch(`${DB_BASE}/boards/${todayKey}.json`, {
+      method: "POST",
+      body: JSON.stringify({ name, score, ts: Date.now() }),
+    });
+    if (!res.ok) throw new Error(`post failed: ${res.status}`);
+    return (await res.json()).name; // Firebase push key
+  }
+
+  // Players who finished before the shared board existed (or while offline)
+  // get their stored result posted on their next visit.
+  async function backfillPost(played) {
+    if (store.get(K_POSTED)) return;
+    try {
+      let name = (played.name || "").trim();
+      if (!name || name === "Player") name = await ensureName();
+      const score = (played.results || []).reduce((s, x) => s + x.pts, 0);
+      store.set(K_POSTED, await postScore(name, score));
+    } catch { /* still offline — retried on the next visit */ }
+  }
 
   // ── seeded RNG (xmur3 + mulberry32) so everyone gets the same daily mix ─
   function seededRng(str) {
@@ -190,7 +257,8 @@
   let phase = "idle";     // idle | listening | guessing | reveal
 
   const totalScore = () => results.reduce((s, r) => s + r.pts, 0);
-  const playerName = () => (store.get(K_NAME) || "Player").slice(0, 20);
+  const playerName = () =>
+    ((store.get(K_NAME) || "").trim() || store.get(K_ALIAS) || "Player").slice(0, 20);
 
   function show(id) {
     for (const s of document.querySelectorAll(".screen")) s.classList.remove("active");
@@ -217,13 +285,18 @@
     show("screen-home");
   }
 
-  $("start-btn").addEventListener("click", () => {
+  $("start-btn").addEventListener("click", async () => {
     const name = $("name-input").value.trim();
     if (name) store.set(K_NAME, name);
     activeDate = todayKey;
     isArchive = false;
     const played = store.get(K_PLAYED);
-    if (played) { results = played.results; showResults(false); return; }
+    if (played) {
+      results = played.results;
+      showResults(false);
+      backfillPost(played).then(() => renderBoard());
+      return;
+    }
     startLoading();
   });
 
@@ -485,18 +558,29 @@
   });
 
   // ── results, share, leaderboard ─────────────────────────────────────────
-  function finishGame() {
+  async function finishGame() {
     if (isArchive) {
       // Archive runs are practice: remember the score for the archive list,
       // never touch the daily lock or leaderboard.
       store.set(archiveKey(activeDate), { results, ts: Date.now() });
-    } else {
-      store.set(K_PLAYED, { results, name: playerName(), ts: Date.now() });
-      const board = store.get(K_BOARD) || [];
-      board.push({ name: playerName(), score: totalScore(), ts: Date.now() });
-      store.set(K_BOARD, board);
+      showResults(true);
+      return;
     }
+    // Lock the day and show results immediately; alias assignment and the
+    // global post happen in the background so a slow network never stalls
+    // the results screen.
+    store.set(K_PLAYED, { results, name: playerName(), ts: Date.now() });
     showResults(true);
+    const name = await ensureName();
+    store.set(K_PLAYED, { results, name, ts: Date.now() });
+    const board = store.get(K_BOARD) || [];
+    board.push({ name, score: totalScore(), ts: Date.now() });
+    store.set(K_BOARD, board);
+    $("results-sub").textContent = `Nice one, ${name}!`;
+    try {
+      store.set(K_POSTED, await postScore(name, totalScore()));
+      renderBoard();
+    } catch { /* offline — backfilled on the next visit */ }
   }
 
   const OUTCOME_EMOJI = { hit: "✅", miss: "❌", timeout: "⏰" };
@@ -540,11 +624,18 @@
       list.appendChild(row);
     });
     if (!isArchive) {
+      $("board").innerHTML = "";
       renderBoard();
       startCountdown();
+      // Keep the board fresh while the player lingers — friends finish later.
+      clearInterval(boardTimer);
+      boardTimer = setInterval(() => {
+        if ($("screen-results").classList.contains("active") && !isArchive) renderBoard();
+      }, 30000);
     }
     show("screen-results");
   }
+  let boardTimer = null;
 
   $("share-btn").addEventListener("click", async () => {
     const text = shareText();
@@ -561,26 +652,54 @@
     }
   });
 
-  function renderBoard() {
-    const board = (store.get(K_BOARD) || [])
-      .slice()
-      .sort((x, y) => y.score - x.score || x.ts - y.ts);
+  let boardRenderToken = 0;
+  async function renderBoard() {
+    const token = ++boardRenderToken;
     const el = $("board");
+    if (!el.children.length) el.innerHTML = `<div class="board-empty">Loading scores…</div>`;
+
+    let entries = null;
+    let global = false;
+    try {
+      const res = await dbFetch(`${DB_BASE}/boards/${todayKey}.json`);
+      if (res.ok) {
+        const data = (await res.json()) || {};
+        entries = Object.entries(data).map(([key, v]) => ({ key, ...v }));
+        global = true;
+      }
+    } catch { /* offline — local fallback below */ }
+    if (token !== boardRenderToken) return; // a newer render superseded this one
+    if (!entries) {
+      entries = (store.get(K_BOARD) || []).map((e, i) => ({ key: `local${i}`, ...e }));
+    }
+    $("board-note").textContent = global ? "(all players)" : "(offline — this device only)";
+
+    entries.sort((x, y) => y.score - x.score || (x.ts || 0) - (y.ts || 0));
     el.innerHTML = "";
-    if (!board.length) {
-      el.innerHTML = `<div class="board-empty">No scores yet today.</div>`;
+    if (!entries.length) {
+      el.innerHTML = `<div class="board-empty">No scores yet today — be the first!</div>`;
       return;
     }
+    const mine = store.get(K_POSTED);
     const medals = ["🥇", "🥈", "🥉"];
-    board.slice(0, 10).forEach((e, i) => {
+    const addRow = (e, rank) => {
       const row = document.createElement("div");
-      row.className = "board-row";
+      row.className = "board-row" + (e.key === mine ? " me" : "");
       row.innerHTML = `<span class="board-rank"></span><span class="board-name"></span><span class="board-score"></span>`;
-      row.querySelector(".board-rank").textContent = medals[i] || `${i + 1}.`;
+      row.querySelector(".board-rank").textContent = medals[rank] || `${rank + 1}.`;
       row.querySelector(".board-name").textContent = e.name;
       row.querySelector(".board-score").textContent = e.score;
       el.appendChild(row);
-    });
+    };
+    entries.slice(0, 10).forEach(addRow);
+    const myRank = mine ? entries.findIndex((e) => e.key === mine) : -1;
+    if (myRank >= 10) {
+      const dots = document.createElement("div");
+      dots.className = "board-empty";
+      dots.textContent = "⋯";
+      el.appendChild(dots);
+      addRow(entries[myRank], myRank);
+    }
   }
 
   let countdownTimer = null;
