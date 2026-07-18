@@ -21,16 +21,20 @@
   const ELIMINATE_AT_MS = 5000; // halfway: 2 wrong options vanish
   const ELIMINATE_COUNT = 2;
   const MAX_PER_CATEGORY = 2; // variety guard for the daily five
-  const EPOCH = "2026-07-18"; // game #1
+  const EPOCH = "2026-07-11"; // game #1 — a week before launch so the archive opens with history
 
   const $ = (id) => document.getElementById(id);
-  const todayKey = (() => {
-    const d = new Date();
-    const p = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-  })();
-  const gameNo =
-    Math.max(1, Math.round((Date.parse(todayKey) - Date.parse(EPOCH)) / 864e5) + 1);
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const keyOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const todayKey = keyOf(new Date());
+  const gameNoFor = (k) =>
+    Math.max(1, Math.round((Date.parse(k) - Date.parse(EPOCH)) / 864e5) + 1);
+
+  // Which day is being played: today's daily by default, or a past date in
+  // archive mode (shareable, replayable, but never touches the daily
+  // leaderboard or the once-per-day lock).
+  let activeDate = todayKey;
+  let isArchive = false;
 
   // ── storage (private-mode safe) ─────────────────────────────────────────
   const store = {
@@ -138,7 +142,7 @@
   // five songs whose iTunes preview actually resolves — deterministic even
   // when a lookup fails, since everyone walks the same order.
   async function buildDaily(onProgress) {
-    const rng = seededRng(`songsnap:${todayKey}`);
+    const rng = seededRng(`songsnap:${activeDate}`);
     const order = seededShuffle(SONG_POOL, rng);
     const rounds = [];
     const catCount = {};
@@ -159,7 +163,7 @@
 
     // 4 same-category decoys per round, deterministic per date+round.
     rounds.forEach((round, i) => {
-      const rr = seededRng(`songsnap:${todayKey}:r${i}`);
+      const rr = seededRng(`songsnap:${activeDate}:r${i}`);
       const decoys = seededShuffle(
         SONG_POOL.filter(
           (s) => s.c === round.song.c && !chosenTitles.has(s.t + "|" + s.a)
@@ -203,7 +207,7 @@
 
   // ── home ────────────────────────────────────────────────────────────────
   function initHome() {
-    $("game-no").textContent = `#${gameNo} · ${todayKey}`;
+    $("game-no").textContent = `#${gameNoFor(todayKey)} · ${todayKey}`;
     $("name-input").value = store.get(K_NAME) || "";
     const played = store.get(K_PLAYED);
     if (played) {
@@ -216,10 +220,52 @@
   $("start-btn").addEventListener("click", () => {
     const name = $("name-input").value.trim();
     if (name) store.set(K_NAME, name);
+    activeDate = todayKey;
+    isArchive = false;
     const played = store.get(K_PLAYED);
     if (played) { results = played.results; showResults(false); return; }
     startLoading();
   });
+
+  // ── archive ─────────────────────────────────────────────────────────────
+  const archiveKey = (dateKey) => `songsnap:archive:${dateKey}`;
+  const sumResults = (r) => (r || []).reduce((s, x) => s + x.pts, 0);
+
+  function showArchive() {
+    stopAudio();
+    const list = $("archive-list");
+    list.innerHTML = "";
+    const d = new Date();
+    d.setDate(d.getDate() - 1); // past days only — today belongs to the daily
+    let any = false;
+    while (Date.parse(keyOf(d)) >= Date.parse(EPOCH)) {
+      const dateKey = keyOf(d);
+      any = true;
+      const row = document.createElement("button");
+      row.className = "archive-row";
+      row.innerHTML = `<span class="archive-no"></span><span class="archive-date"></span><span class="archive-badge"></span>`;
+      row.querySelector(".archive-no").textContent = `#${gameNoFor(dateKey)}`;
+      row.querySelector(".archive-date").textContent = dateKey;
+      const prev = store.get(archiveKey(dateKey)) || store.get(`songsnap:played:${dateKey}`);
+      row.querySelector(".archive-badge").textContent =
+        prev ? `${sumResults(prev.results)} pts` : "Play ▸";
+      row.addEventListener("click", () => {
+        activeDate = dateKey;
+        isArchive = true;
+        startLoading();
+      });
+      list.appendChild(row);
+      d.setDate(d.getDate() - 1);
+    }
+    if (!any) {
+      list.innerHTML = `<div class="board-empty">No past days yet — the archive opens tomorrow!</div>`;
+    }
+    show("screen-archive");
+  }
+
+  $("archive-btn").addEventListener("click", showArchive);
+  $("results-archive-btn").addEventListener("click", showArchive);
+  $("archive-back-btn").addEventListener("click", () => { initHome(); });
 
   // ── loading ─────────────────────────────────────────────────────────────
   async function startLoading() {
@@ -261,7 +307,8 @@
     stopAudio();
     phase = "idle";
     const r = rounds[current];
-    $("round-label").textContent = `Round ${current + 1} of ${ROUNDS}`;
+    $("round-label").textContent =
+      (isArchive ? `#${gameNoFor(activeDate)} · ` : "") + `Round ${current + 1} of ${ROUNDS}`;
     $("round-cat").textContent = r.song.c;
     $("round-score").textContent = `${totalScore()} pts`;
     $("play-btn").disabled = false;
@@ -439,10 +486,16 @@
 
   // ── results, share, leaderboard ─────────────────────────────────────────
   function finishGame() {
-    store.set(K_PLAYED, { results, name: playerName(), ts: Date.now() });
-    const board = store.get(K_BOARD) || [];
-    board.push({ name: playerName(), score: totalScore(), ts: Date.now() });
-    store.set(K_BOARD, board);
+    if (isArchive) {
+      // Archive runs are practice: remember the score for the archive list,
+      // never touch the daily lock or leaderboard.
+      store.set(archiveKey(activeDate), { results, ts: Date.now() });
+    } else {
+      store.set(K_PLAYED, { results, name: playerName(), ts: Date.now() });
+      const board = store.get(K_BOARD) || [];
+      board.push({ name: playerName(), score: totalScore(), ts: Date.now() });
+      store.set(K_BOARD, board);
+    }
     showResults(true);
   }
 
@@ -453,15 +506,21 @@
     const url = location.origin.startsWith("http")
       ? location.origin + location.pathname
       : "";
-    return `🎵 SongSnap #${gameNo} — ${totalScore()}/500\n${line}\nCan you beat me?${url ? " " + url : ""}`;
+    const tag = `#${gameNoFor(activeDate)}${isArchive ? " (archive)" : ""}`;
+    return `🎵 SongSnap ${tag} — ${totalScore()}/500\n${line}\nCan you beat me?${url ? " " + url : ""}`;
   }
 
   function showResults(fresh) {
     stopAudio();
     $("final-score").textContent = totalScore();
-    $("results-sub").textContent = fresh
-      ? `Nice one, ${playerName()}!`
-      : `Your score today, ${playerName()}`;
+    $("results-sub").textContent = isArchive
+      ? `Archive #${gameNoFor(activeDate)} · ${activeDate}`
+      : fresh
+        ? `Nice one, ${playerName()}!`
+        : `Your score today, ${playerName()}`;
+    $("archive-note").hidden = !isArchive;
+    $("board-section").hidden = isArchive;
+    $("next-mix").hidden = isArchive;
     const list = $("results-rounds");
     list.innerHTML = "";
     results.forEach((r, i) => {
@@ -480,8 +539,10 @@
       row.querySelector(".result-pts").textContent = `${OUTCOME_EMOJI[r.outcome]} ${r.pts}`;
       list.appendChild(row);
     });
-    renderBoard();
-    startCountdown();
+    if (!isArchive) {
+      renderBoard();
+      startCountdown();
+    }
     show("screen-results");
   }
 
@@ -522,6 +583,7 @@
     });
   }
 
+  let countdownTimer = null;
   function startCountdown() {
     const el = $("next-mix");
     const tick = () => {
@@ -532,7 +594,8 @@
       el.textContent = `Next daily mix in ${p(Math.floor(ms / 36e5))}:${p(Math.floor(ms / 6e4) % 60)}:${p(Math.floor(ms / 1e3) % 60)}`;
     };
     tick();
-    setInterval(tick, 1000);
+    clearInterval(countdownTimer);
+    countdownTimer = setInterval(tick, 1000);
   }
 
   let toastTimer = null;
