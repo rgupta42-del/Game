@@ -20,7 +20,15 @@ button and a daily leaderboard. No install, no backend, no accounts.
    | 10th second | 10 |
    | Time's up / wrong | 0 |
 
-4. After 5 rounds you get your total out of 500, a **📣 Share** button
+4. While the clock runs you can use two small buttons:
+   - **🔁 Replay** — hear the 5-second clip again, free. The timer keeps
+     running and you can still answer mid-replay.
+   - **💡 Hint - Lose 30pts** — a written hint (release year + album, or the
+     artist's first letter) for −30 pts off that round, floor 0.
+
+   At the **5-second mark**, 2 of the wrong options disappear, leaving a
+   3-way choice. A wrong guess still scores 0, whenever it happens.
+5. After 5 rounds you get your total out of 500, a **📣 Share** button
    (Web Share on phones, clipboard elsewhere), and **today's leaderboard**.
 
 ## The daily mix
