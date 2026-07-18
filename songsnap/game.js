@@ -281,6 +281,9 @@
     if (played) {
       $("start-btn").textContent = "See today's results";
       $("home-note").textContent = "You've already played today — new mix at midnight!";
+      // Post any pre-update/offline score the moment the page opens — don't
+      // wait for the player to tap through to the results screen.
+      backfillPost(played);
     }
     show("screen-home");
   }

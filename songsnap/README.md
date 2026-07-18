@@ -72,10 +72,34 @@ they finish.
 - Players who leave the name blank get a **unique sequential alias**
   ("Player 0001", "Player 0002", …) from an atomic counter (ETag
   compare-and-swap; random 4-digit fallback if offline).
-- If posting fails (offline), the score is kept locally and **backfilled on
-  the next visit**; meanwhile the board falls back to on-device scores with
-  an "(offline)" note.
+- If posting fails (offline), the score is kept locally and **backfilled the
+  next time the game is opened**; meanwhile the board falls back to
+  on-device scores with an "(offline)" note.
 - Archive runs never post to the board.
+
+### Locking down the database (one-time, ~2 minutes)
+
+By default the database path the leaderboard uses is world-writable (same as
+the main game's live-draft rooms). `firebase.rules.json` in this folder locks
+the SongSnap subtree down while leaving the NBA game's rooms untouched:
+
+- score entries are **append-only** — nobody can edit or delete anyone's
+  score, ever;
+- entries must match the exact shape the game sends: a 1–24 char name, a
+  score that's a multiple of 10 between 0 and 500, and a timestamp — nothing
+  else is accepted;
+- the alias counter can only ever **increment by exactly 1**, so aliases stay
+  unique and nobody can vandalize the sequence;
+- everything else under `drafts/songsnap` is closed.
+
+To apply: open https://console.firebase.google.com → project
+**nba-redraft** → **Build → Realtime Database → Rules** tab → replace the
+contents with `firebase.rules.json` → **Publish**. The game needs no code
+change and keeps working through the switch.
+
+What this can't do (would need Firebase Auth + sign-in): stop someone who
+reads the client code from posting a fake-but-valid-looking score. The rules
+make the board tamper-proof, not identity-proof — fine for a friends game.
 
 ## Files
 
