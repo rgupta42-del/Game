@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1115">
   <meta name="description" content="SongSnap — hear 5 seconds of a hit, guess it fast. 5 songs a day, 500 points on the line.">
   <title>SongSnap — Daily Song Quiz</title>
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <main class="app">
@@ -30,7 +30,17 @@
       <input id="name-input" type="text" maxlength="20" placeholder="Player" autocomplete="nickname">
 
       <button id="start-btn" class="btn primary big">▶ Play today's mix</button>
+      <button id="archive-btn" class="btn big secondary">🗂️ Play the archive</button>
       <p class="home-note" id="home-note"></p>
+    </section>
+
+    <!-- ARCHIVE -->
+    <section id="screen-archive" class="screen">
+      <h2 class="archive-title">🗂️ Archive</h2>
+      <p class="archive-sub">Replay any past day's mix as often as you like. Archive runs are
+        shareable, but they don't count for the daily leaderboard — only today's mix does.</p>
+      <div id="archive-list" class="card archive-list"></div>
+      <button id="archive-back-btn" class="btn">← Back</button>
     </section>
 
     <!-- LOADING -->
@@ -94,12 +104,19 @@
       <h2 id="results-sub" class="results-sub"></h2>
       <div class="final"><span id="final-score">0</span><span class="final-max">/500</span></div>
 
+      <p id="archive-note" class="archive-note" hidden>🗂️ Archive game — shareable,
+        but not eligible for the daily leaderboard.</p>
+
       <div id="results-rounds" class="card results-rounds"></div>
 
       <button id="share-btn" class="btn primary big">📣 Share with a friend</button>
 
-      <h3 class="board-title">🏆 Today's leaderboard <span class="board-note">(this device)</span></h3>
-      <div id="board" class="card board"></div>
+      <div id="board-section">
+        <h3 class="board-title">🏆 Today's leaderboard <span class="board-note">(this device)</span></h3>
+        <div id="board" class="card board"></div>
+      </div>
+
+      <button id="results-archive-btn" class="btn big secondary">🗂️ Play the archive</button>
 
       <p id="next-mix" class="next-mix"></p>
     </section>
@@ -107,7 +124,7 @@
   </main>
   <div id="toast" class="toast"></div>
 
-  <script src="songs.js?v=3"></script>
-  <script src="game.js?v=3"></script>
+  <script src="songs.js?v=4"></script>
+  <script src="game.js?v=4"></script>
 </body>
 </html>

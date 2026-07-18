@@ -38,7 +38,16 @@ button and a daily leaderboard. No install, no backend, no accounts.
   2 songs per category for variety.
 - Categories: **90s pop, 00s pop, pop rock, hip hop, and recent pop**.
 - One play per day per device; a new mix drops at local midnight (countdown
-  on the results screen).
+  on the results screen). Every player faces the same five songs that day,
+  so the daily leaderboard is a fair fight.
+
+## The archive
+
+**🗂️ Play the archive** (home and results screens) lists every past day back
+to game #1. Archive runs are for fun: replay any day as often as you like and
+share the result (tagged `(archive)` in the share text), but they never count
+for the daily leaderboard and never touch your one-per-day daily attempt.
+The archive list remembers your latest score for each day.
 
 ## Where the music comes from
 
