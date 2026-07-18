@@ -42,12 +42,14 @@ button and a daily leaderboard. No install, no backend, no accounts.
 
 ## Where the music comes from
 
-No audio ships with this repo. Each day's tracks are resolved at runtime
-against the **iTunes Search API** (JSONP, so it works from any static host or
-even `file://`), and the game plays the first 5 seconds of Apple's official
-30-second preview clip. If a preview is unavailable, the daily walk
-deterministically skips to the next candidate, so everyone still gets the
-same five.
+No audio ships with this repo. Every pool entry carries a link to Apple's
+official **30-second preview clip** (plus artwork, year, and album), baked
+into `songs.js` at build time from the iTunes Search API — so at runtime the
+game simply streams the clip and makes **no search API calls** (that API is
+unreliable and rate-limited in browsers, especially mobile). If a baked URL
+ever goes stale, the game re-resolves that one song with a live JSONP search
+and swaps in the fresh clip mid-game. To re-bake after editing the pool, run
+the `bake_pool.js` helper described in the pool file's header.
 
 ## Leaderboard scope
 
