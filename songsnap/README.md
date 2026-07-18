@@ -34,9 +34,13 @@ button and a daily leaderboard. No install, no backend, no accounts.
 ## The daily mix
 
 - Everyone gets the **same 5 songs each day** — the mix is picked
-  deterministically from a ~180-song pool seeded by the date, with at most
-  2 songs per category for variety.
-- Categories: **90s pop, 00s pop, pop rock, hip hop, and recent pop**.
+  deterministically from a **1,450+ song pool** seeded by the date, with at
+  most 2 songs per category for variety.
+- Categories: **pop and hip hop split by decade (90s / 00s / 10s / 20s),
+  pop rock, and Dance & EDM anthems**.
+- The pool is versioned: growing it would re-roll past days' mixes, so dates
+  before the expansion cutover replay from the frozen `songs-v1.js` pool —
+  archive days stay identical to what people originally played.
 - One play per day per device; a new mix drops at local midnight (countdown
   on the results screen). Every player faces the same five songs that day,
   so the daily leaderboard is a fair fight.

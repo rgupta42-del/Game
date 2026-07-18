@@ -22,6 +22,11 @@
   const ELIMINATE_COUNT = 2;
   const MAX_PER_CATEGORY = 2; // variety guard for the daily five
   const EPOCH = "2026-07-11"; // game #1 — a week before launch so the archive opens with history
+  // Daily mixes are derived from the pool, so growing the pool would re-roll
+  // every past day's five (breaking archive replays and any in-progress
+  // board). Dates before this cutover replay from the frozen v1 pool.
+  const POOL_V2_FROM = "2026-07-19";
+  const poolFor = (dateKey) => (dateKey < POOL_V2_FROM ? SONG_POOL_V1 : SONG_POOL);
 
   const $ = (id) => document.getElementById(id);
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -209,8 +214,9 @@
   // five songs whose iTunes preview actually resolves — deterministic even
   // when a lookup fails, since everyone walks the same order.
   async function buildDaily(onProgress) {
+    const pool = poolFor(activeDate);
     const rng = seededRng(`songsnap:${activeDate}`);
-    const order = seededShuffle(SONG_POOL, rng);
+    const order = seededShuffle(pool, rng);
     const rounds = [];
     const catCount = {};
     const chosenTitles = new Set();
@@ -232,7 +238,7 @@
     rounds.forEach((round, i) => {
       const rr = seededRng(`songsnap:${activeDate}:r${i}`);
       const decoys = seededShuffle(
-        SONG_POOL.filter(
+        pool.filter(
           (s) => s.c === round.song.c && !chosenTitles.has(s.t + "|" + s.a)
         ),
         rr
