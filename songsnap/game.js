@@ -98,6 +98,17 @@
       .replace(/\s+/g, " ")
       .trim();
 
+  // Preview metadata is baked into songs.js at build time, so the normal
+  // path touches no search API (it's unreliable/rate-limited in browsers,
+  // especially mobile). The live JSONP search below survives only as a
+  // fallback for entries without baked data or with a rotted preview URL.
+  function resolveMedia(song) {
+    if (song.p) {
+      return { previewUrl: song.p, artwork: song.art || "", year: song.y || null, album: song.al || "" };
+    }
+    return findPreview(song);
+  }
+
   async function findPreview(song) {
     const term = encodeURIComponent(song.q || `${song.a} ${song.t}`);
     const data = await jsonp(
@@ -138,7 +149,7 @@
       if ((catCount[song.c] || 0) >= MAX_PER_CATEGORY) continue;
       onProgress(rounds.length, song.c);
       try {
-        const media = await findPreview(song);
+        const media = await resolveMedia(song);
         catCount[song.c] = (catCount[song.c] || 0) + 1;
         chosenTitles.add(song.t + "|" + song.a);
         rounds.push({ song, media });
@@ -222,6 +233,16 @@
       audios = rounds.map((r) => {
         const a = new Audio(r.media.previewUrl);
         a.preload = "auto";
+        // If a baked preview URL has rotted, re-resolve it live and swap in
+        // the fresh clip without interrupting the game.
+        a.addEventListener("error", async () => {
+          try {
+            const fresh = await findPreview(r.song);
+            r.media = fresh;
+            a.src = fresh.previewUrl;
+            a.load();
+          } catch { /* round still playable — the guess window works without audio */ }
+        }, { once: true });
         return a;
       });
       current = 0;
