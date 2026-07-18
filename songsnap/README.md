@@ -60,12 +60,22 @@ ever goes stale, the game re-resolves that one song with a live JSONP search
 and swaps in the fresh clip mid-game. To re-bake after editing the pool, run
 the `bake_pool.js` helper described in the pool file's header.
 
-## Leaderboard scope
+## Leaderboard (global)
 
-The daily leaderboard is stored in `localStorage`, so it ranks players **on
-the same device** (great for pass-and-play) — challenge remote friends with
-the share button. Hooking it to Firebase for a global board would follow the
-same pattern as the main game's `FIREBASE_SETUP.md`.
+The daily leaderboard is **shared across all players**: scores post to the
+same Firebase Realtime Database the main game's live sync uses (REST API,
+under the `drafts/songsnap` namespace its rules leave open — no SDK). The
+results screen shows the top 10 plus your own rank, highlights your row, and
+auto-refreshes every 30 seconds while open, so friends' scores appear as
+they finish.
+
+- Players who leave the name blank get a **unique sequential alias**
+  ("Player 0001", "Player 0002", …) from an atomic counter (ETag
+  compare-and-swap; random 4-digit fallback if offline).
+- If posting fails (offline), the score is kept locally and **backfilled on
+  the next visit**; meanwhile the board falls back to on-device scores with
+  an "(offline)" note.
+- Archive runs never post to the board.
 
 ## Files
 
