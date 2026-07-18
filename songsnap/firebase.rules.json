@@ -1,0 +1,32 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "drafts": {
+      "songsnap": {
+        "boards": {
+          "$date": {
+            ".read": true,
+            "$entry": {
+              ".write": "!data.exists() && newData.exists()",
+              ".validate": "newData.hasChildren(['name', 'score', 'ts'])",
+              "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24" },
+              "score": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 500 && newData.val() % 10 === 0" },
+              "ts": { ".validate": "newData.isNumber()" },
+              "$other": { ".validate": false }
+            }
+          }
+        },
+        "aliasCounter": {
+          ".read": true,
+          ".write": "newData.isNumber() && ((!data.exists() && newData.val() === 1) || newData.val() === data.val() + 1)"
+        },
+        "$other": { ".read": false, ".write": false }
+      },
+      "$room": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}
