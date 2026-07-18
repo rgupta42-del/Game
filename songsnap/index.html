@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1115">
+  <meta name="description" content="SongSnap — hear 5 seconds of a hit, guess it fast. 5 songs a day, 500 points on the line.">
+  <title>SongSnap — Daily Song Quiz</title>
+  <link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+  <main class="app">
+
+    <!-- HOME -->
+    <section id="screen-home" class="screen active">
+      <div class="logo">🎵</div>
+      <h1>SongSnap</h1>
+      <p class="tagline">Hear 5 seconds. Guess the song. Beat the clock.</p>
+      <p class="game-no" id="game-no"></p>
+
+      <div class="rules card">
+        <div class="rule"><span>🎧</span> 5 songs every day — 90s &amp; 00s pop, pop rock, hip hop &amp; today's hits</div>
+        <div class="rule"><span>⏱️</span> You hear the first 5 seconds, then get 10 seconds to pick from 5 options</div>
+        <div class="rule"><span>⚡</span> Answer in the 1st second for 100 pts, the 2nd for 90… hesitate to 0</div>
+        <div class="rule"><span>🏆</span> 500 max — share your score and top the daily leaderboard</div>
+      </div>
+
+      <label class="name-label" for="name-input">Your name (for the leaderboard)</label>
+      <input id="name-input" type="text" maxlength="20" placeholder="Player" autocomplete="nickname">
+
+      <button id="start-btn" class="btn primary big">▶ Play today's mix</button>
+      <p class="home-note" id="home-note"></p>
+    </section>
+
+    <!-- LOADING -->
+    <section id="screen-loading" class="screen">
+      <div class="logo pulse">🎵</div>
+      <h2 id="loading-status">Finding today's tracks… 0/5</h2>
+      <p class="loading-cat" id="loading-cat"></p>
+      <div id="loading-error" hidden>
+        <p>Check your internet connection — the previews stream from Apple Music.</p>
+        <button id="retry-btn" class="btn primary">Try again</button>
+      </div>
+    </section>
+
+    <!-- ROUND -->
+    <section id="screen-round" class="screen">
+      <header class="round-head">
+        <span id="round-label" class="round-label"></span>
+        <span id="round-cat" class="chip"></span>
+        <span id="round-score" class="round-score"></span>
+      </header>
+
+      <div id="play-wrap" class="stage">
+        <p class="stage-hint">Ready? You'll hear 5 seconds, then the clock starts.</p>
+        <button id="play-btn" class="btn primary big">▶ Play the clip</button>
+      </div>
+
+      <div id="listen-wrap" class="stage" hidden>
+        <div class="equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+        <p class="stage-hint">Listen closely… <span id="listen-count" class="count">5</span></p>
+        <div class="bar-track"><div id="listen-bar" class="bar listen"></div></div>
+      </div>
+
+      <div id="guess-wrap" hidden>
+        <div class="ticker-row">
+          <span class="ticker-label">Answer now for</span>
+          <span id="points-ticker" class="ticker">100</span>
+          <span class="ticker-label">pts</span>
+        </div>
+        <div class="bar-track"><div id="guess-bar" class="bar guess"></div></div>
+        <div id="options" class="options"></div>
+      </div>
+
+      <div id="reveal-wrap" class="reveal card" hidden>
+        <img id="reveal-art" class="reveal-art" alt="Album artwork">
+        <div class="reveal-meta">
+          <div id="reveal-title" class="reveal-title"></div>
+          <div id="reveal-artist" class="reveal-artist"></div>
+          <div id="reveal-pts" class="reveal-pts"></div>
+        </div>
+        <button id="next-btn" class="btn primary">Next round ➜</button>
+      </div>
+    </section>
+
+    <!-- RESULTS -->
+    <section id="screen-results" class="screen">
+      <h2 id="results-sub" class="results-sub"></h2>
+      <div class="final"><span id="final-score">0</span><span class="final-max">/500</span></div>
+
+      <div id="results-rounds" class="card results-rounds"></div>
+
+      <button id="share-btn" class="btn primary big">📣 Share with a friend</button>
+
+      <h3 class="board-title">🏆 Today's leaderboard <span class="board-note">(this device)</span></h3>
+      <div id="board" class="card board"></div>
+
+      <p id="next-mix" class="next-mix"></p>
+    </section>
+
+  </main>
+  <div id="toast" class="toast"></div>
+
+  <script src="songs.js?v=1"></script>
+  <script src="game.js?v=1"></script>
+</body>
+</html>

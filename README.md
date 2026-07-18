@@ -16,6 +16,10 @@ locker-room culture — to crown the manager who built the best team.
 
 No install, no backend, no internet required. Just open the page.
 
+> 🎵 **Also in this repo: [SongSnap](songsnap/)** — a daily song-guessing game.
+> Hear the first 5 seconds of a hit, then beat a 10-second clock to name it.
+> 5 songs a day, 500 points, shareable scores. Open `songsnap/index.html` to play.
+
 ## How to play
 
 1. Open `index.html` (or the live link) in any modern browser.
