@@ -76,6 +76,17 @@ input[type="text"]:focus { border-color: var(--accent); }
 .btn.big { padding: 16px 18px; font-size: 18px; }
 .btn:disabled { opacity: .55; cursor: default; }
 .home-note { text-align: center; color: var(--warn); font-size: 13.5px; margin-top: 12px; min-height: 1em; }
+.mode-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.mode-btn {
+  flex: 1; display: grid; gap: 3px; text-align: left; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 12px 14px; color: var(--text); transition: border-color .12s ease;
+}
+.mode-btn b { font-size: 15.5px; }
+.mode-btn span { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.mode-btn.selected { border-color: var(--accent); background: rgba(124, 92, 255, .12); }
+.mode-btn.selected b { color: var(--accent-2); }
+
 .btn.secondary { margin-top: 10px; background: var(--card); border: 1px solid var(--line); }
 .btn.secondary:hover { border-color: var(--accent); }
 
