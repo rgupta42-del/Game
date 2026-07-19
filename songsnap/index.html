@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#0f1115">
-  <meta name="description" content="SongSnap — hear 5 seconds of a hit, guess it fast. 5 songs a day, 500 points on the line.">
+  <meta name="description" content="SongSnap — guess the hit from a short clip. 5 songs a day, everyone plays the same mix.">
   <title>SongSnap — Daily Song Quiz</title>
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <main class="app">
@@ -15,19 +15,17 @@
     <section id="screen-home" class="screen active">
       <div class="logo">🎵</div>
       <h1>SongSnap</h1>
-      <p class="tagline">Hear 5 seconds. Guess the song. Beat the clock.</p>
+      <p class="tagline">Hear a clip. Guess the song. Beat the clock.</p>
       <p class="game-no" id="game-no"></p>
 
       <div class="rules card">
-        <div class="rule"><span>🎧</span> 5 songs a day from 1,450+ hits — pop &amp; hip hop from the 90s to now, pop rock &amp; EDM anthems</div>
-        <div class="rule"><span>⏱️</span> Hear a short clip, then you get 10 seconds to pick from 5 options</div>
-        <div class="rule"><span>⚡</span> Hard: 3-sec clip, 150 pts max, −15 every second · Easy: 5-sec clip, 100 pts max, −10/sec</div>
-        <div class="rule"><span>🔁</span> Replay the clip free, or take a hint for −30 pts — at halfway, 2 wrong options vanish</div>
-        <div class="rule"><span>🏆</span> 750 max on hard — share your score and top the daily leaderboard, live across all players</div>
+        <div class="rule"><span>🎧</span> Name the hit from a short clip — 5 songs a day, same for everyone</div>
+        <div class="rule"><span>⚡</span> Answer fast for max points · free Replay · Hint costs 30 · 2 wrong options vanish at halfway</div>
+        <div class="rule"><span>🏆</span> Top the live daily leaderboard — or replay any past day in the archive</div>
       </div>
 
-      <label class="name-label" for="name-input">Your name (required — it goes on the daily leaderboard)</label>
-      <input id="name-input" type="text" maxlength="20" placeholder="Enter your name to play" autocomplete="nickname" required>
+      <label class="name-label" for="name-input">Name for the leaderboard (optional)</label>
+      <input id="name-input" type="text" maxlength="20" placeholder="Blank = auto alias" autocomplete="nickname">
 
       <div class="mode-row">
         <button id="mode-hard" class="mode-btn selected"><b>🔥 Hard</b><span>3-sec clip · 150 pts/song · −15/sec</span></button>
@@ -130,8 +128,8 @@
   </main>
   <div id="toast" class="toast"></div>
 
-  <script src="songs-v1.js?v=10"></script>
-  <script src="songs.js?v=10"></script>
-  <script src="game.js?v=10"></script>
+  <script src="songs-v1.js?v=11"></script>
+  <script src="songs.js?v=11"></script>
+  <script src="game.js?v=11"></script>
 </body>
 </html>
