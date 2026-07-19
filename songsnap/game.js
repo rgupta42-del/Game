@@ -31,6 +31,9 @@
   // board). Dates before this cutover replay from the frozen v1 pool.
   const POOL_V2_FROM = "2026-07-19";
   const poolFor = (dateKey) => (dateKey < POOL_V2_FROM ? SONG_POOL_V1 : SONG_POOL);
+  // A song that was one of a day's five can't be an answer again for this
+  // many days. Applies to v2-era dates; v1 history is frozen.
+  const NO_REPEAT_DAYS = 30;
 
   const $ = (id) => document.getElementById(id);
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -232,27 +235,59 @@
   }
 
   // ── daily puzzle assembly ───────────────────────────────────────────────
-  // Walk the seeded shuffle of the pool (≤2 per category) and keep the first
-  // five songs whose iTunes preview actually resolves — deterministic even
-  // when a lookup fails, since everyone walks the same order.
-  async function buildDaily(onProgress) {
-    const pool = poolFor(activeDate);
-    const rng = seededRng(`songsnap:${activeDate}`);
-    const order = seededShuffle(pool, rng);
-    const rounds = [];
+  // Deterministic five for a date: walk the date-seeded shuffle of that
+  // date's pool, ≤2 per category, skipping songs excluded by the no-repeat
+  // window. Every entry ships with a baked preview, so no network is needed.
+  const songKey = (s) => s.t + "|" + s.a;
+  function pickFive(dateKey, excluded) {
+    const order = seededShuffle(poolFor(dateKey), seededRng(`songsnap:${dateKey}`));
+    const picks = [];
     const catCount = {};
-    const chosenTitles = new Set();
+    for (const s of order) {
+      if (picks.length >= ROUNDS) break;
+      if ((catCount[s.c] || 0) >= MAX_PER_CATEGORY) continue;
+      if (!s.p) continue;
+      if (excluded && excluded.has(songKey(s))) continue;
+      catCount[s.c] = (catCount[s.c] || 0) + 1;
+      picks.push(s);
+    }
+    return picks;
+  }
 
-    for (const song of order) {
-      if (rounds.length >= ROUNDS) break;
-      if ((catCount[song.c] || 0) >= MAX_PER_CATEGORY) continue;
+  // Answers from the last NO_REPEAT_DAYS days relative to dateKey, chained
+  // deterministically from the v2 cutover (and seeded with the trailing
+  // frozen v1 days, so the first v2 days can't repeat them either).
+  function excludedFor(dateKey) {
+    if (dateKey < POOL_V2_FROM) return null; // frozen history stays as played
+    const window = [];
+    const start = new Date(`${POOL_V2_FROM}T00:00:00`);
+    for (let i = NO_REPEAT_DAYS; i >= 1; i--) {
+      const d = new Date(start);
+      d.setDate(d.getDate() - i);
+      const k = keyOf(d);
+      if (k >= EPOCH) window.push(pickFive(k, null).map(songKey));
+    }
+    const cur = new Date(start);
+    while (keyOf(cur) < dateKey) {
+      const excl = new Set(window.slice(-NO_REPEAT_DAYS).flat());
+      window.push(pickFive(keyOf(cur), excl).map(songKey));
+      cur.setDate(cur.getDate() + 1);
+    }
+    return new Set(window.slice(-NO_REPEAT_DAYS).flat());
+  }
+
+  async function buildDaily(onProgress) {
+    const picks = pickFive(activeDate, excludedFor(activeDate));
+    const pool = poolFor(activeDate);
+    const rounds = [];
+    const chosenTitles = new Set();
+    for (const song of picks) {
       onProgress(rounds.length, song.c);
       try {
         const media = await resolveMedia(song);
-        catCount[song.c] = (catCount[song.c] || 0) + 1;
-        chosenTitles.add(song.t + "|" + song.a);
+        chosenTitles.add(songKey(song));
         rounds.push({ song, media });
-      } catch { /* preview unavailable — walk on to the next candidate */ }
+      } catch { /* preview unavailable — round set will come up short */ }
     }
     if (rounds.length < ROUNDS) throw new Error("not enough previews");
 
@@ -437,6 +472,7 @@
     $("guess-wrap").hidden = true;
     $("reveal-wrap").hidden = true;
     $("options").innerHTML = "";
+    window.scrollTo(0, 0);
     show("screen-round");
   }
 
@@ -596,6 +632,7 @@
     $("reveal-pts").className = `reveal-pts ${outcome}`;
     $("next-btn").textContent = current === ROUNDS - 1 ? "See results ➜" : "Next round ➜";
     $("reveal-wrap").hidden = false;
+    window.scrollTo({ top: 0, behavior: "smooth" });
     audios[current].play().catch(() => { /* keep-playing is best-effort */ });
   }
 
