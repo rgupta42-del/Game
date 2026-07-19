@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1115">
   <meta name="description" content="SongSnap — hear 5 seconds of a hit, guess it fast. 5 songs a day, 500 points on the line.">
   <title>SongSnap — Daily Song Quiz</title>
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
   <main class="app">
@@ -26,8 +26,8 @@
         <div class="rule"><span>🏆</span> 750 max on hard — share your score and top the daily leaderboard, live across all players</div>
       </div>
 
-      <label class="name-label" for="name-input">Your name (for the daily leaderboard)</label>
-      <input id="name-input" type="text" maxlength="20" placeholder="Blank = auto alias (e.g. Player 0042)" autocomplete="nickname">
+      <label class="name-label" for="name-input">Your name (required — it goes on the daily leaderboard)</label>
+      <input id="name-input" type="text" maxlength="20" placeholder="Enter your name to play" autocomplete="nickname" required>
 
       <div class="mode-row">
         <button id="mode-hard" class="mode-btn selected"><b>🔥 Hard</b><span>3-sec clip · 150 pts/song · −15/sec</span></button>
@@ -130,8 +130,8 @@
   </main>
   <div id="toast" class="toast"></div>
 
-  <script src="songs-v1.js?v=9"></script>
-  <script src="songs.js?v=9"></script>
-  <script src="game.js?v=9"></script>
+  <script src="songs-v1.js?v=10"></script>
+  <script src="songs.js?v=10"></script>
+  <script src="game.js?v=10"></script>
 </body>
 </html>
