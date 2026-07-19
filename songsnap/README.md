@@ -1,34 +1,34 @@
 # 🎵 SongSnap — Daily Song Quiz
 
-Hear the first **5 seconds** of a hit, then race a **10-second clock** to pick
-it out of **5 options**. Five songs a day, **500 points** on the line, a share
-button and a daily leaderboard. No install, no backend, no accounts.
+Hear a short clip of a hit, then race a **10-second clock** to pick it out
+of **5 options**. Five songs a day, a share button and a daily leaderboard.
+No install, no backend, no accounts.
+
+Two difficulties, chosen on the home screen:
+
+| | Clip | Max per song | Decay | Daily max |
+|---|---|---|---|---|
+| **🔥 Hard** (default) | 3 seconds | 150 pts | −15/sec | 750 |
+| **🌱 Easy** | 5 seconds | 100 pts | −10/sec | 500 |
 
 ## How to play
 
 1. Open `songsnap/index.html` (or the live link) in any modern browser.
 2. Enter a name (it goes on the leaderboard) and hit **Play today's mix**.
-3. Each round: press **Play the clip**, listen to 5 seconds, then the guess
-   window opens with 5 choices. The faster you answer, the more you score:
-
-   | Answered in… | Points |
-   |---|---|
-   | 1st second | 100 |
-   | 2nd second | 90 |
-   | 3rd second | 80 |
-   | … | … |
-   | 10th second | 10 |
-   | Time's up / wrong | 0 |
+3. Each round: press **Play the clip**, listen, then the guess window opens
+   with 5 choices. You score the mode's max if you answer in the 1st second,
+   and lose the mode's decay every second after (150/−15 hard, 100/−10
+   easy); time's up or a wrong pick scores 0.
 
 4. While the clock runs you can use two small buttons:
-   - **🔁 Replay** — hear the 5-second clip again, free. The timer keeps
+   - **🔁 Replay** — hear the clip again, free. The timer keeps
      running and you can still answer mid-replay.
    - **💡 Hint - Lose 30pts** — a written hint (release year + album, or the
      artist's first letter) for −30 pts off that round, floor 0.
 
    At the **5-second mark**, 2 of the wrong options disappear, leaving a
    3-way choice. A wrong guess still scores 0, whenever it happens.
-5. After 5 rounds you get your total out of 500, a **📣 Share** button
+5. After 5 rounds you get your total (out of 750 hard / 500 easy), a **📣 Share** button
    (Web Share on phones, clipboard elsewhere), and **today's leaderboard**.
 
 ## The daily mix
@@ -79,6 +79,8 @@ they finish.
 - If posting fails (offline), the score is kept locally and **backfilled the
   next time the game is opened**; meanwhile the board falls back to
   on-device scores with an "(offline)" note.
+- Entries record which difficulty they were played on; easy (and pre-mode
+  legacy) entries show a 🌱 next to the name.
 - Archive runs never post to the board.
 
 ### Locking down the database (one-time, ~2 minutes)
@@ -90,8 +92,8 @@ the SongSnap subtree down while leaving the NBA game's rooms untouched:
 - score entries are **append-only** — nobody can edit or delete anyone's
   score, ever;
 - entries must match the exact shape the game sends: a 1–24 char name, a
-  score that's a multiple of 10 between 0 and 500, and a timestamp — nothing
-  else is accepted;
+  score that's a multiple of 5 between 0 and 750, an optional mode
+  (hard/easy), and a timestamp — nothing else is accepted;
 - the alias counter can only ever **increment by exactly 1**, so aliases stay
   unique and nobody can vandalize the sequence;
 - everything else under `drafts/songsnap` is closed.

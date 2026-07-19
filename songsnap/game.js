@@ -12,11 +12,15 @@
  */
 "use strict";
 (() => {
-  const CLIP_SECONDS = 5;
   const GUESS_SECONDS = 10;
   const ROUNDS = 5;
   const OPTIONS = 5;
-  const MAX_ROUND_POINTS = 100;
+  // Difficulty modes: hard is the default — shorter clip, bigger points,
+  // steeper decay. Both share the same 10-second guess window.
+  const MODES = {
+    hard: { clip: 3, max: 150, drop: 15, label: "Hard" },
+    easy: { clip: 5, max: 100, drop: 10, label: "Easy" },
+  };
   const HINT_COST = 30;
   const ELIMINATE_AT_MS = 5000; // halfway: 2 wrong options vanish
   const ELIMINATE_COUNT = 2;
@@ -41,6 +45,13 @@
   let activeDate = todayKey;
   let isArchive = false;
 
+  // Difficulty is chosen on the home screen and locked in when a game
+  // starts; resultsMode tracks what the displayed results were played on.
+  let mode = null; // set in initHome from storage (default hard)
+  let gameMode = "hard";
+  let resultsMode = "hard";
+  const cfg = () => MODES[gameMode] || MODES.hard;
+
   // ── storage (private-mode safe) ─────────────────────────────────────────
   const store = {
     get(k) {
@@ -52,6 +63,7 @@
   };
   const K_NAME = "songsnap:name";
   const K_ALIAS = "songsnap:alias";
+  const K_MODE = "songsnap:mode";
   const K_PLAYED = `songsnap:played:${todayKey}`;
   const K_BOARD = `songsnap:board:${todayKey}`;
   const K_POSTED = `songsnap:posted:${todayKey}`;
@@ -100,11 +112,21 @@
     return alias;
   }
 
-  async function postScore(name, score) {
-    const res = await dbFetch(`${DB_BASE}/boards/${todayKey}.json`, {
+  async function postScore(name, score, playedMode) {
+    const entry = { name, score, ts: Date.now() };
+    if (playedMode) entry.mode = playedMode;
+    let res = await dbFetch(`${DB_BASE}/boards/${todayKey}.json`, {
       method: "POST",
-      body: JSON.stringify({ name, score, ts: Date.now() }),
+      body: JSON.stringify(entry),
     });
+    if (!res.ok && playedMode) {
+      // Older security rules reject unknown fields — retry without mode.
+      delete entry.mode;
+      res = await dbFetch(`${DB_BASE}/boards/${todayKey}.json`, {
+        method: "POST",
+        body: JSON.stringify(entry),
+      });
+    }
     if (!res.ok) throw new Error(`post failed: ${res.status}`);
     return (await res.json()).name; // Firebase push key
   }
@@ -117,7 +139,7 @@
       let name = (played.name || "").trim();
       if (!name || name === "Player") name = await ensureName();
       const score = (played.results || []).reduce((s, x) => s + x.pts, 0);
-      store.set(K_POSTED, await postScore(name, score));
+      store.set(K_POSTED, await postScore(name, score, played.mode));
     } catch { /* still offline — retried on the next visit */ }
   }
 
@@ -280,9 +302,19 @@
   }
 
   // ── home ────────────────────────────────────────────────────────────────
+  function setMode(m) {
+    mode = MODES[m] ? m : "hard";
+    store.set(K_MODE, mode);
+    $("mode-hard").classList.toggle("selected", mode === "hard");
+    $("mode-easy").classList.toggle("selected", mode === "easy");
+  }
+  $("mode-hard").addEventListener("click", () => setMode("hard"));
+  $("mode-easy").addEventListener("click", () => setMode("easy"));
+
   function initHome() {
     $("game-no").textContent = `#${gameNoFor(todayKey)} · ${todayKey}`;
     $("name-input").value = store.get(K_NAME) || "";
+    setMode(store.get(K_MODE) || "hard");
     const played = store.get(K_PLAYED);
     if (played) {
       $("start-btn").textContent = "See today's results";
@@ -302,6 +334,7 @@
     const played = store.get(K_PLAYED);
     if (played) {
       results = played.results;
+      resultsMode = played.mode || "easy";
       showResults(false);
       backfillPost(played).then(() => renderBoard());
       return;
@@ -351,6 +384,8 @@
 
   // ── loading ─────────────────────────────────────────────────────────────
   async function startLoading() {
+    gameMode = mode || "hard";
+    resultsMode = gameMode;
     show("screen-loading");
     $("loading-error").hidden = true;
     try {
@@ -393,6 +428,9 @@
       (isArchive ? `#${gameNoFor(activeDate)} · ` : "") + `Round ${current + 1} of ${ROUNDS}`;
     $("round-cat").textContent = r.song.c;
     $("round-score").textContent = `${totalScore()} pts`;
+    $("play-hint").textContent =
+      `${cfg().label} mode: you'll hear ${cfg().clip} seconds, then the clock starts.`;
+    $("listen-count").textContent = cfg().clip;
     $("play-btn").disabled = false;
     $("play-wrap").hidden = false;
     $("listen-wrap").hidden = true;
@@ -414,12 +452,13 @@
       // Autoplay/load hiccup: fall through to the guess phase anyway so the
       // game never soft-locks; the bar still runs the full 5 seconds.
     });
+    const clipLen = cfg().clip;
     const t0 = performance.now();
     clipTimer = setInterval(() => {
       const sec = (performance.now() - t0) / 1000;
-      $("listen-bar").style.width = `${Math.min(100, (sec / CLIP_SECONDS) * 100)}%`;
-      $("listen-count").textContent = Math.max(0, Math.ceil(CLIP_SECONDS - sec));
-      if (sec >= CLIP_SECONDS) {
+      $("listen-bar").style.width = `${Math.min(100, (sec / clipLen) * 100)}%`;
+      $("listen-count").textContent = Math.max(0, Math.ceil(clipLen - sec));
+      if (sec >= clipLen) {
         clearInterval(clipTimer);
         clipTimer = null;
         try { a.pause(); } catch { /* fine */ }
@@ -430,7 +469,7 @@
   });
 
   function pointsNow(elapsedMs) {
-    const base = Math.max(0, MAX_ROUND_POINTS - Math.floor(elapsedMs / 1000) * 10);
+    const base = Math.max(0, cfg().max - Math.floor(elapsedMs / 1000) * cfg().drop);
     return Math.max(0, base - (hintUsed ? HINT_COST : 0));
   }
 
@@ -469,6 +508,7 @@
     eliminated = false;
     $("listen-wrap").hidden = true;
     $("guess-wrap").hidden = false;
+    $("points-ticker").textContent = cfg().max;
     $("hint-box").hidden = true;
     $("hint-box").textContent = "";
     $("hint-btn").disabled = false;
@@ -502,7 +542,7 @@
     a.currentTime = 0;
     a.play().catch(() => { /* best-effort */ });
     replayTimer = setInterval(() => {
-      if (a.currentTime >= CLIP_SECONDS) {
+      if (a.currentTime >= cfg().clip) {
         clearInterval(replayTimer);
         replayTimer = null;
         try { a.pause(); } catch { /* fine */ }
@@ -578,21 +618,23 @@
     // Lock the day and show results immediately; alias assignment and the
     // global post happen in the background so a slow network never stalls
     // the results screen.
-    store.set(K_PLAYED, { results, name: playerName(), ts: Date.now() });
+    store.set(K_PLAYED, { results, name: playerName(), mode: gameMode, ts: Date.now() });
     showResults(true);
     const name = await ensureName();
-    store.set(K_PLAYED, { results, name, ts: Date.now() });
+    store.set(K_PLAYED, { results, name, mode: gameMode, ts: Date.now() });
     const board = store.get(K_BOARD) || [];
-    board.push({ name, score: totalScore(), ts: Date.now() });
+    board.push({ name, score: totalScore(), mode: gameMode, ts: Date.now() });
     store.set(K_BOARD, board);
     $("results-sub").textContent = `Nice one, ${name}!`;
     try {
-      store.set(K_POSTED, await postScore(name, totalScore()));
+      store.set(K_POSTED, await postScore(name, totalScore(), gameMode));
       renderBoard();
     } catch { /* offline — backfilled on the next visit */ }
   }
 
   const OUTCOME_EMOJI = { hit: "✅", miss: "❌", timeout: "⏰" };
+
+  const maxFor = (m) => (MODES[m] || MODES.easy).max * ROUNDS;
 
   function shareText() {
     const line = results.map((r) => `${OUTCOME_EMOJI[r.outcome]}${r.pts}`).join(" ");
@@ -600,12 +642,14 @@
       ? location.origin + location.pathname
       : "";
     const tag = `#${gameNoFor(activeDate)}${isArchive ? " (archive)" : ""}`;
-    return `🎵 SongSnap ${tag} — ${totalScore()}/500\n${line}\nCan you beat me?${url ? " " + url : ""}`;
+    const label = (MODES[resultsMode] || MODES.easy).label;
+    return `🎵 SongSnap ${tag} — ${totalScore()}/${maxFor(resultsMode)} · ${label}\n${line}\nCan you beat me?${url ? " " + url : ""}`;
   }
 
   function showResults(fresh) {
     stopAudio();
     $("final-score").textContent = totalScore();
+    $("final-max").textContent = `/${maxFor(resultsMode)}`;
     $("results-sub").textContent = isArchive
       ? `Archive #${gameNoFor(activeDate)} · ${activeDate}`
       : fresh
@@ -696,7 +740,9 @@
       row.className = "board-row" + (e.key === mine ? " me" : "");
       row.innerHTML = `<span class="board-rank"></span><span class="board-name"></span><span class="board-score"></span>`;
       row.querySelector(".board-rank").textContent = medals[rank] || `${rank + 1}.`;
-      row.querySelector(".board-name").textContent = e.name;
+      // Hard is the house default; easy (and legacy pre-mode) runs get a 🌱.
+      row.querySelector(".board-name").textContent =
+        e.name + (e.mode === "hard" ? "" : " 🌱");
       row.querySelector(".board-score").textContent = e.score;
       el.appendChild(row);
     };

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1115">
   <meta name="description" content="SongSnap — hear 5 seconds of a hit, guess it fast. 5 songs a day, 500 points on the line.">
   <title>SongSnap — Daily Song Quiz</title>
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
   <main class="app">
@@ -20,14 +20,19 @@
 
       <div class="rules card">
         <div class="rule"><span>🎧</span> 5 songs a day from 1,450+ hits — pop &amp; hip hop from the 90s to now, pop rock &amp; EDM anthems</div>
-        <div class="rule"><span>⏱️</span> You hear the first 5 seconds, then get 10 seconds to pick from 5 options</div>
-        <div class="rule"><span>⚡</span> Answer in the 1st second for 100 pts, the 2nd for 90… hesitate to 0</div>
+        <div class="rule"><span>⏱️</span> Hear a short clip, then you get 10 seconds to pick from 5 options</div>
+        <div class="rule"><span>⚡</span> Hard: 3-sec clip, 150 pts max, −15 every second · Easy: 5-sec clip, 100 pts max, −10/sec</div>
         <div class="rule"><span>🔁</span> Replay the clip free, or take a hint for −30 pts — at halfway, 2 wrong options vanish</div>
-        <div class="rule"><span>🏆</span> 500 max — share your score and top the daily leaderboard, live across all players</div>
+        <div class="rule"><span>🏆</span> 750 max on hard — share your score and top the daily leaderboard, live across all players</div>
       </div>
 
       <label class="name-label" for="name-input">Your name (for the daily leaderboard)</label>
       <input id="name-input" type="text" maxlength="20" placeholder="Blank = auto alias (e.g. Player 0042)" autocomplete="nickname">
+
+      <div class="mode-row">
+        <button id="mode-hard" class="mode-btn selected"><b>🔥 Hard</b><span>3-sec clip · 150 pts/song · −15/sec</span></button>
+        <button id="mode-easy" class="mode-btn"><b>🌱 Easy</b><span>5-sec clip · 100 pts/song · −10/sec</span></button>
+      </div>
 
       <button id="start-btn" class="btn primary big">▶ Play today's mix</button>
       <button id="archive-btn" class="btn big secondary">🗂️ Play the archive</button>
@@ -63,7 +68,7 @@
       </header>
 
       <div id="play-wrap" class="stage">
-        <p class="stage-hint">Ready? You'll hear 5 seconds, then the clock starts.</p>
+        <p class="stage-hint" id="play-hint">Ready? You'll hear the clip, then the clock starts.</p>
         <button id="play-btn" class="btn primary big">▶ Play the clip</button>
       </div>
 
@@ -102,7 +107,7 @@
     <!-- RESULTS -->
     <section id="screen-results" class="screen">
       <h2 id="results-sub" class="results-sub"></h2>
-      <div class="final"><span id="final-score">0</span><span class="final-max">/500</span></div>
+      <div class="final"><span id="final-score">0</span><span class="final-max" id="final-max">/750</span></div>
 
       <p id="archive-note" class="archive-note" hidden>🗂️ Archive game — shareable,
         but not eligible for the daily leaderboard.</p>
@@ -124,8 +129,8 @@
   </main>
   <div id="toast" class="toast"></div>
 
-  <script src="songs-v1.js?v=7"></script>
-  <script src="songs.js?v=7"></script>
-  <script src="game.js?v=7"></script>
+  <script src="songs-v1.js?v=8"></script>
+  <script src="songs.js?v=8"></script>
+  <script src="game.js?v=8"></script>
 </body>
 </html>
