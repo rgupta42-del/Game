@@ -361,36 +361,19 @@
     show("screen-home");
   }
 
-  // A name is required before playing — flag the input and stop if blank.
-  function requireName() {
-    const name = $("name-input").value.trim();
-    if (!name) {
-      $("name-input").classList.add("input-error");
-      $("home-note").textContent = "⬆ Enter your name first — it goes on the leaderboard!";
-      $("name-input").focus();
-      return null;
-    }
-    store.set(K_NAME, name);
-    return name;
-  }
-  $("name-input").addEventListener("input", () => {
-    $("name-input").classList.remove("input-error");
-    if ($("home-note").textContent.startsWith("⬆")) $("home-note").textContent = "";
-  });
-
   $("start-btn").addEventListener("click", async () => {
+    const name = $("name-input").value.trim();
+    if (name) store.set(K_NAME, name);
     activeDate = todayKey;
     isArchive = false;
     const played = store.get(K_PLAYED);
     if (played) {
-      // Already played — viewing results needs no name.
       results = played.results;
       resultsMode = played.mode || "easy";
       showResults(false);
       backfillPost(played).then(() => renderBoard());
       return;
     }
-    if (!requireName()) return;
     startLoading();
   });
 
@@ -430,7 +413,11 @@
     show("screen-archive");
   }
 
-  $("archive-btn").addEventListener("click", () => { if (requireName()) showArchive(); });
+  $("archive-btn").addEventListener("click", () => {
+    const name = $("name-input").value.trim();
+    if (name) store.set(K_NAME, name);
+    showArchive();
+  });
   $("results-archive-btn").addEventListener("click", showArchive);
   $("archive-back-btn").addEventListener("click", () => { initHome(); });
 

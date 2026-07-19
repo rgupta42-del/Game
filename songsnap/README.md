@@ -14,8 +14,8 @@ Two difficulties, chosen on the home screen:
 ## How to play
 
 1. Open `songsnap/index.html` (or the live link) in any modern browser.
-2. Enter your name — required, it goes on the leaderboard — and hit
-   **Play today's mix**.
+2. Optionally enter a name for the leaderboard (blank gets a fun auto
+   alias) and hit **Play today's mix**.
 3. Each round: press **Play the clip**, listen, then the guess window opens
    with 5 choices. You score the mode's max if you answer in the 1st second,
    and lose the mode's decay every second after (150/−15 hard, 100/−10
@@ -74,9 +74,9 @@ results screen shows the top 10 plus your own rank, highlights your row, and
 auto-refreshes every 30 seconds while open, so friends' scores appear as
 they finish.
 
-- A name is **required** to play. Legacy scores recorded before names were
-  mandatory get a unique sequential alias ("Player 0001", "Player 0002", …)
-  from an atomic counter when they're backfilled.
+- Names are optional: players who leave the field blank get a **unique
+  sequential alias** ("Player 0001", "Player 0002", …) from an atomic
+  counter (ETag compare-and-swap; random 4-digit fallback if offline).
 - If posting fails (offline), the score is kept locally and **backfilled the
   next time the game is opened**; meanwhile the board falls back to
   on-device scores with an "(offline)" note.

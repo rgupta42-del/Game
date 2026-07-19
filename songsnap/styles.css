@@ -65,8 +65,6 @@ input[type="text"] {
   outline: none; margin-bottom: 14px;
 }
 input[type="text"]:focus { border-color: var(--accent); }
-input[type="text"].input-error { border-color: var(--bad); animation: shake .3s ease; }
-@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 
 .btn {
   display: block; width: 100%; border: none; cursor: pointer;
