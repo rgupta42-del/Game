@@ -5,14 +5,23 @@
  * every successful same-origin response; when offline, serve from the cache.
  * The ?v= query strings on assets keep cache entries version-keyed.
  */
-const CACHE = "nbaredraft-v1";
+const CACHE = "nbaredraft-v2";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {
-  e.waitUntil(self.clients.claim());
+  // Claim clients and purge caches from older SW versions — v1 had cached a
+  // day-one copy of SongSnap and could resurrect it on flaky connections.
+  e.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      ),
+    ])
+  );
 });
 
 self.addEventListener("fetch", (e) => {
@@ -21,6 +30,9 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(req.url);
   // Only handle same-origin (app shell + assets); let CDNs/Firebase pass through.
   if (url.origin !== self.location.origin) return;
+  // SongSnap manages its own freshness (versioned URLs + baked data) — never
+  // intercept it, so a stale cached copy can't shadow a deployed fix.
+  if (url.pathname.includes("/songsnap/")) return;
 
   e.respondWith(
     fetch(req)
