@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1115">
   <meta name="description" content="SongSnap — hear 5 seconds of a hit, guess it fast. 5 songs a day, 500 points on the line.">
   <title>SongSnap — Daily Song Quiz</title>
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
   <main class="app">
@@ -90,17 +90,18 @@
           <button id="hint-btn" class="btn mini">💡 Hint - Lose 30pts</button>
         </div>
         <div id="hint-box" class="hint-box" hidden></div>
-        <div id="options" class="options"></div>
-      </div>
-
-      <div id="reveal-wrap" class="reveal card" hidden>
-        <img id="reveal-art" class="reveal-art" alt="Album artwork">
-        <div class="reveal-meta">
-          <div id="reveal-title" class="reveal-title"></div>
-          <div id="reveal-artist" class="reveal-artist"></div>
-          <div id="reveal-pts" class="reveal-pts"></div>
+        <!-- Reveal sits ABOVE the options so the answer and Next button are
+             in view without scrolling past five choices. -->
+        <div id="reveal-wrap" class="reveal card" hidden>
+          <img id="reveal-art" class="reveal-art" alt="Album artwork">
+          <div class="reveal-meta">
+            <div id="reveal-title" class="reveal-title"></div>
+            <div id="reveal-artist" class="reveal-artist"></div>
+            <div id="reveal-pts" class="reveal-pts"></div>
+          </div>
+          <button id="next-btn" class="btn primary">Next round ➜</button>
         </div>
-        <button id="next-btn" class="btn primary">Next round ➜</button>
+        <div id="options" class="options"></div>
       </div>
     </section>
 
@@ -129,8 +130,8 @@
   </main>
   <div id="toast" class="toast"></div>
 
-  <script src="songs-v1.js?v=8"></script>
-  <script src="songs.js?v=8"></script>
-  <script src="game.js?v=8"></script>
+  <script src="songs-v1.js?v=9"></script>
+  <script src="songs.js?v=9"></script>
+  <script src="game.js?v=9"></script>
 </body>
 </html>
