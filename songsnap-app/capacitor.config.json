@@ -1,0 +1,9 @@
+{
+  "appId": "com.rgupta42.songsnap",
+  "appName": "SongSnap",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#0f1115"
+  }
+}
